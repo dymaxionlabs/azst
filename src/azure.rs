@@ -636,6 +636,9 @@ impl AzCopyClient {
         // This is set via environment variable
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
+        // Run from temp directory to avoid creating latest_version.txt in current dir
+        cmd.current_dir(std::env::temp_dir());
+
         // Capture stdout to parse JSON output
         // All azcopy output goes to stdout with --output-type json
         cmd.stdout(std::process::Stdio::piped());
@@ -686,6 +689,9 @@ impl AzCopyClient {
         // Use Azure CLI credentials
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
+        // Run from temp directory to avoid creating latest_version.txt in current dir
+        cmd.current_dir(std::env::temp_dir());
+
         // Inherit stdout/stderr so user sees real-time progress
         cmd.stdout(std::process::Stdio::inherit());
         cmd.stderr(std::process::Stdio::inherit());
@@ -716,6 +722,9 @@ impl AzCopyClient {
 
         // Use Azure CLI credentials
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
+
+        // Run from temp directory to avoid creating latest_version.txt in current dir
+        cmd.current_dir(std::env::temp_dir());
 
         // Inherit stdout/stderr so user sees real-time progress
         cmd.stdout(std::process::Stdio::inherit());
