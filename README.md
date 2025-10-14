@@ -1,12 +1,15 @@
 # azst - Azure Storage Tool
 
-CLI tool that provides easier Azure Blob Storage management with `gsutil`-like
-semantics.
+[![CI](https://github.com/munshkr/azst/actions/workflows/ci.yml/badge.svg)](https://github.com/munshkr/azst/actions/workflows/ci.yml)
+[![Release](https://github.com/munshkr/azst/actions/workflows/release.yml/badge.svg)](https://github.com/munshkr/azst/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A Rust CLI tool that wraps the Azure CLI to provide easier Azure Blob Storage management with `gsutil`-like semantics.
 
 ## Features
 
 - **cp** - Copy files to/from Azure storage with `cp` semantics
-- **ls** - List objects in Azure storage with detailed information  
+- **ls** - List objects in Azure storage with detailed information
 - **rm** - Remove objects from Azure storage
 - **mb** - Create storage containers (make bucket)
 - **rb** - Remove storage containers (remove bucket)
@@ -23,17 +26,57 @@ semantics.
 
 ## Installation
 
+### Quick Install (Recommended)
+
+Install the latest release using curl:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/munshkr/azst/main/install.sh | bash
+```
+
+This will download and install the appropriate binary for your system to `~/.local/bin/`.
+
+### Manual Installation
+
+Download the latest release for your platform from the [releases page](https://github.com/munshkr/azst/releases).
+
+#### macOS / Linux
+
+```bash
+# Download and extract
+tar xzf azst-*.tar.gz
+
+# Move to a directory in your PATH
+sudo mv azst /usr/local/bin/
+
+# Or install to user directory
+mkdir -p ~/.local/bin
+mv azst ~/.local/bin/
+export PATH="$PATH:~/.local/bin"  # Add to your ~/.bashrc or ~/.zshrc
+```
+
+#### Windows
+
+Download the `.zip` file, extract it, and add the directory to your PATH.
+
+### Build from Source
+
+Requires [Rust](https://rustup.rs/) to be installed.
+
 ```bash
 # Clone the repository
 git clone https://github.com/munshkr/azst
 cd azst
 
-# Build the project
-cargo build --release
-
-# Install (optional)
+# Build and install
 cargo install --path .
 ```
+
+The binary will be installed to `~/.cargo/bin/azst` (make sure this directory is in your PATH).
+
+### Development Build
+
+```bash
 
 ## Usage
 
@@ -148,7 +191,7 @@ find /local/files -name "*.txt" | xargs -I {} azst cp {} az://myaccount/text-fil
 The tool provides clear error messages for common issues:
 
 - Azure CLI not installed or not logged in
-- Invalid URI formats  
+- Invalid URI formats
 - Permission issues
 - Network connectivity problems
 - Storage account configuration issues
