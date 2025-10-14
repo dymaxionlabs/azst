@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::{cp, ls, rm};
+use crate::commands::{cp, ls, rm, sync};
 
 #[derive(Parser)]
 #[command(name = "azst")]
@@ -55,6 +55,19 @@ pub enum Commands {
         #[arg(short, long)]
         force: bool,
     },
+    /// Sync directories to/from Azure storage (like rsync)
+    Sync {
+        /// Source path (local directory or az://container/path)
+        source: String,
+        /// Destination path (local directory or az://container/path)
+        destination: String,
+        /// Delete files in destination that don't exist in source
+        #[arg(short, long)]
+        delete: bool,
+        /// Skip confirmation prompt for delete operations
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 impl Cli {
@@ -87,6 +100,12 @@ impl Cli {
                 recursive,
                 force,
             } => rm::execute(path, *recursive, *force).await,
+            Commands::Sync {
+                source,
+                destination,
+                delete,
+                force,
+            } => sync::execute(source, destination, *delete, *force).await,
         }
     }
 }

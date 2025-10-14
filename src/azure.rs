@@ -663,16 +663,20 @@ impl AzCopyClient {
         // Use Azure CLI credentials
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
-        cmd.arg("--output-type=json");
+        // Inherit stdout/stderr so user sees real-time progress
+        cmd.stdout(std::process::Stdio::inherit());
+        cmd.stderr(std::process::Stdio::inherit());
 
-        let output = cmd
-            .output()
+        let status = cmd
+            .status()
             .await
             .context("Failed to execute azcopy sync")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(self.parse_azcopy_error(&stderr));
+        if !status.success() {
+            return Err(anyhow!(
+                "AzCopy sync operation failed with exit code: {}",
+                status.code().unwrap_or(-1)
+            ));
         }
 
         Ok(())
@@ -690,16 +694,20 @@ impl AzCopyClient {
         // Use Azure CLI credentials
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
-        cmd.arg("--output-type=json");
+        // Inherit stdout/stderr so user sees real-time progress
+        cmd.stdout(std::process::Stdio::inherit());
+        cmd.stderr(std::process::Stdio::inherit());
 
-        let output = cmd
-            .output()
+        let status = cmd
+            .status()
             .await
             .context("Failed to execute azcopy remove")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(self.parse_azcopy_error(&stderr));
+        if !status.success() {
+            return Err(anyhow!(
+                "AzCopy remove operation failed with exit code: {}",
+                status.code().unwrap_or(-1)
+            ));
         }
 
         Ok(())
