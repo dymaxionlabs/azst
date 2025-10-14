@@ -16,7 +16,7 @@ pub async fn execute(path: &str, recursive: bool, force: bool) -> Result<()> {
 }
 
 async fn remove_azure_object(path: &str, recursive: bool, force: bool) -> Result<()> {
-    let (account, container, blob_path) = parse_azure_uri(path)?;
+    let (_account, container, blob_path) = parse_azure_uri(path)?;
 
     // Validate that we have a container specified
     if container.is_empty() {

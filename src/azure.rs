@@ -219,6 +219,7 @@ impl AzureClient {
     }
 
     /// Upload a file to Azure storage
+    #[allow(dead_code)]
     pub async fn upload_file(
         &self,
         local_path: &str,
@@ -293,6 +294,7 @@ impl AzureClient {
     }
 
     /// Upload a directory to Azure storage using batch upload for better performance
+    #[allow(dead_code)]
     pub async fn upload_batch(
         &self,
         local_dir: &str,
@@ -365,6 +367,7 @@ impl AzureClient {
     }
 
     /// Download a file from Azure storage
+    #[allow(dead_code)]
     pub async fn download_file(
         &self,
         container: &str,
@@ -446,6 +449,7 @@ impl AzureClient {
     }
 
     /// Delete a blob from Azure storage
+    #[allow(dead_code)]
     pub async fn delete_blob(&self, container: &str, blob_name: &str) -> Result<()> {
         let mut cmd = AsyncCommand::new("az");
         cmd.args([
@@ -547,6 +551,7 @@ pub fn convert_az_uri_to_url(az_uri: &str) -> Result<String> {
 
 #[derive(Clone)]
 pub struct AzCopyClient {
+    #[allow(dead_code)]
     config: AzureConfig,
 }
 
@@ -560,11 +565,13 @@ impl AzCopyClient {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_storage_account(mut self, account: &str) -> Self {
         self.config.storage_account = Some(account.to_string());
         self
     }
 
+    #[allow(dead_code)]
     pub fn get_storage_account(&self) -> Option<&str> {
         self.config.storage_account.as_deref()
     }
@@ -730,6 +737,7 @@ impl AzCopyClient {
     }
 
     /// Parse AzCopy errors and provide user-friendly messages
+    #[allow(dead_code)]
     fn parse_azcopy_error(&self, stderr: &str) -> anyhow::Error {
         if stderr.contains("authentication") || stderr.contains("AuthenticationFailed") {
             anyhow!(
