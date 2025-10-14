@@ -67,8 +67,7 @@ pub fn parse_azure_uri(uri: &str) -> Result<(Option<String>, String, Option<Stri
 /// Storage account names: 3-24 chars, lowercase letters and numbers only
 fn is_storage_account_name(s: &str) -> bool {
     let len = s.len();
-    len >= 3
-        && len <= 24
+    (3..=24).contains(&len)
         && s.chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
 }

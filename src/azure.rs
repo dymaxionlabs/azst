@@ -77,7 +77,7 @@ impl AzureClient {
 
         // Check if user is logged in
         let output = AsyncCommand::new("az")
-            .args(&["account", "show"])
+            .args(["account", "show"])
             .output()
             .await
             .context("Failed to check Azure login status")?;
@@ -95,7 +95,7 @@ impl AzureClient {
     #[allow(dead_code)]
     pub async fn get_default_storage_account(&self) -> Result<Option<String>> {
         let output = AsyncCommand::new("az")
-            .args(&["configure", "--list-defaults"])
+            .args(["configure", "--list-defaults"])
             .output()
             .await
             .context("Failed to get Azure CLI defaults")?;
@@ -119,10 +119,10 @@ impl AzureClient {
     /// List containers in the storage account
     pub async fn list_containers(&self) -> Result<Vec<ContainerInfo>> {
         let mut cmd = AsyncCommand::new("az");
-        cmd.args(&["storage", "container", "list", "--output", "json"]);
+        cmd.args(["storage", "container", "list", "--output", "json"]);
 
         if let Some(ref account) = self.config.storage_account {
-            cmd.args(&["--account-name", account]);
+            cmd.args(["--account-name", account]);
         }
 
         let output = cmd
@@ -145,7 +145,7 @@ impl AzureClient {
     /// List blobs in a container with optional prefix
     pub async fn list_blobs(&self, container: &str, prefix: Option<&str>) -> Result<Vec<BlobInfo>> {
         let mut cmd = AsyncCommand::new("az");
-        cmd.args(&[
+        cmd.args([
             "storage",
             "blob",
             "list",
@@ -156,11 +156,11 @@ impl AzureClient {
         ]);
 
         if let Some(prefix_val) = prefix {
-            cmd.args(&["--prefix", prefix_val]);
+            cmd.args(["--prefix", prefix_val]);
         }
 
         if let Some(ref account) = self.config.storage_account {
-            cmd.args(&["--account-name", account]);
+            cmd.args(["--account-name", account]);
         }
 
         let output = cmd
@@ -188,7 +188,7 @@ impl AzureClient {
         blob_name: &str,
     ) -> Result<()> {
         let mut cmd = AsyncCommand::new("az");
-        cmd.args(&[
+        cmd.args([
             "storage",
             "blob",
             "upload",
@@ -202,7 +202,7 @@ impl AzureClient {
         ]);
 
         if let Some(ref account) = self.config.storage_account {
-            cmd.args(&["--account-name", account]);
+            cmd.args(["--account-name", account]);
         }
 
         let output = cmd
@@ -226,7 +226,7 @@ impl AzureClient {
         local_path: &str,
     ) -> Result<()> {
         let mut cmd = AsyncCommand::new("az");
-        cmd.args(&[
+        cmd.args([
             "storage",
             "blob",
             "download",
@@ -239,7 +239,7 @@ impl AzureClient {
         ]);
 
         if let Some(ref account) = self.config.storage_account {
-            cmd.args(&["--account-name", account]);
+            cmd.args(["--account-name", account]);
         }
 
         let output = cmd
@@ -258,7 +258,7 @@ impl AzureClient {
     /// Delete a blob from Azure storage
     pub async fn delete_blob(&self, container: &str, blob_name: &str) -> Result<()> {
         let mut cmd = AsyncCommand::new("az");
-        cmd.args(&[
+        cmd.args([
             "storage",
             "blob",
             "delete",
@@ -269,7 +269,7 @@ impl AzureClient {
         ]);
 
         if let Some(ref account) = self.config.storage_account {
-            cmd.args(&["--account-name", account]);
+            cmd.args(["--account-name", account]);
         }
 
         let output = cmd
@@ -288,10 +288,10 @@ impl AzureClient {
     /// Create a container
     pub async fn create_container(&self, container: &str) -> Result<()> {
         let mut cmd = AsyncCommand::new("az");
-        cmd.args(&["storage", "container", "create", "--name", container]);
+        cmd.args(["storage", "container", "create", "--name", container]);
 
         if let Some(ref account) = self.config.storage_account {
-            cmd.args(&["--account-name", account]);
+            cmd.args(["--account-name", account]);
         }
 
         let output = cmd
@@ -310,10 +310,10 @@ impl AzureClient {
     /// Delete a container
     pub async fn delete_container(&self, container: &str) -> Result<()> {
         let mut cmd = AsyncCommand::new("az");
-        cmd.args(&["storage", "container", "delete", "--name", container]);
+        cmd.args(["storage", "container", "delete", "--name", container]);
 
         if let Some(ref account) = self.config.storage_account {
-            cmd.args(&["--account-name", account]);
+            cmd.args(["--account-name", account]);
         }
 
         let output = cmd

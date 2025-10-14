@@ -40,9 +40,9 @@ async fn remove_azure_object(
             remove_single_blob(&container, &path, force, &client).await
         }
     } else {
-        return Err(anyhow!(
+        Err(anyhow!(
             "Cannot remove entire container with rm. Use 'azst rb' instead"
-        ));
+        ))
     }
 }
 
@@ -104,11 +104,15 @@ async fn remove_azure_prefix(
     if !force {
         println!("Found {} objects to remove:", blobs.len());
         for (i, blob) in blobs.iter().enumerate() {
-            if i < 5 {
-                println!("  az://{}/{}", container.yellow(), blob.name.cyan());
-            } else if i == 5 {
-                println!("  ... and {} more", blobs.len() - 5);
-                break;
+            match i.cmp(&5) {
+                std::cmp::Ordering::Less => {
+                    println!("  az://{}/{}", container.yellow(), blob.name.cyan());
+                }
+                std::cmp::Ordering::Equal => {
+                    println!("  ... and {} more", blobs.len() - 5);
+                    break;
+                }
+                std::cmp::Ordering::Greater => break,
             }
         }
 
