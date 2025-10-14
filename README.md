@@ -1,7 +1,7 @@
 # azst - Azure Storage Tool
 
-[![CI](https://github.com/munshkr/azst/actions/workflows/ci.yml/badge.svg)](https://github.com/munshkr/azst/actions/workflows/ci.yml)
-[![Release](https://github.com/munshkr/azst/actions/workflows/release.yml/badge.svg)](https://github.com/munshkr/azst/actions/workflows/release.yml)
+[![CI](https://github.com/dymaxionlabs/azst/actions/workflows/ci.yml/badge.svg)](https://github.com/dymaxionlabs/azst/actions/workflows/ci.yml)
+[![Release](https://github.com/dymaxionlabs/azst/actions/workflows/release.yml/badge.svg)](https://github.com/dymaxionlabs/azst/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Rust CLI tool that wraps the Azure CLI to provide easier Azure Blob Storage management with `gsutil`-like semantics.
@@ -31,14 +31,14 @@ A Rust CLI tool that wraps the Azure CLI to provide easier Azure Blob Storage ma
 Install the latest release using curl:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/munshkr/azst/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.sh | bash
 ```
 
 This will download and install the appropriate binary for your system to `~/.local/bin/`.
 
 ### Manual Installation
 
-Download the latest release for your platform from the [releases page](https://github.com/munshkr/azst/releases).
+Download the latest release for your platform from the [releases page](https://github.com/dymaxionlabs/azst/releases).
 
 #### macOS / Linux
 
@@ -65,7 +65,7 @@ Requires [Rust](https://rustup.rs/) to be installed.
 
 ```bash
 # Clone the repository
-git clone https://github.com/munshkr/azst
+git clone https://github.com/dymaxionlabs/azst
 cd azst
 
 # Build and install

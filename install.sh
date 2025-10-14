@@ -2,9 +2,9 @@
 set -e
 
 # azst installation script
-# Usage: curl -sSL https://raw.githubusercontent.com/munshkr/azst/main/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.sh | bash
 
-REPO="munshkr/azst"
+REPO="dymaxionlabs/azst"
 BINARY_NAME="azst"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
