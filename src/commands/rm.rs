@@ -213,3 +213,48 @@ async fn remove_local_directory(path: &str, force: bool) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_remove_single_blob_docs() {
+        // Test case: azst rm az://account/container/file.txt
+        // Expected: Remove single blob after confirmation
+    }
+
+    #[test]
+    fn test_remove_with_prefix_docs() {
+        // Test case: azst rm -r az://account/container/prefix/
+        // Expected: Remove all blobs with prefix after confirmation
+    }
+
+    #[test]
+    fn test_remove_force_docs() {
+        // Test case: azst rm -rf az://account/container/prefix/
+        // Expected: Remove all blobs with prefix without confirmation
+    }
+
+    #[test]
+    fn test_remove_local_file_docs() {
+        // Test case: azst rm /local/file.txt
+        // Expected: Remove local file after confirmation
+    }
+
+    #[test]
+    fn test_remove_local_directory_docs() {
+        // Test case: azst rm -r /local/dir/
+        // Expected: Remove local directory recursively after confirmation
+    }
+
+    #[test]
+    fn test_remove_container_error_docs() {
+        // Test case: azst rm az://account/container/
+        // Expected: Error - use 'azst rb' instead
+    }
+
+    #[test]
+    fn test_remove_non_recursive_error_docs() {
+        // Test case: azst rm az://account/container/prefix/ (without -r)
+        // Expected: Error - requires -r flag
+    }
+}

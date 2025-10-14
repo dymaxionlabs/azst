@@ -329,3 +329,133 @@ impl AzureClient {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_azure_client_new() {
+        let client = AzureClient::new();
+        assert!(client.config.storage_account.is_none());
+        assert!(client.config.subscription_id.is_none());
+    }
+
+    #[test]
+    fn test_azure_client_with_storage_account() {
+        let client = AzureClient::new().with_storage_account("myaccount");
+        assert_eq!(client.config.storage_account, Some("myaccount".to_string()));
+    }
+
+    #[test]
+    fn test_azure_client_builder_pattern() {
+        let client = AzureClient::new()
+            .with_storage_account("testaccount")
+            .with_storage_account("newaccount");
+        assert_eq!(
+            client.config.storage_account,
+            Some("newaccount".to_string())
+        );
+    }
+
+    #[test]
+    fn test_blob_info_deserialization() {
+        let json = r#"{
+            "name": "test.txt",
+            "properties": {
+                "contentLength": 1024,
+                "lastModified": "2024-01-01T00:00:00Z",
+                "contentType": "text/plain"
+            }
+        }"#;
+
+        let blob: BlobInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(blob.name, "test.txt");
+        assert_eq!(blob.properties.content_length, 1024);
+        assert_eq!(blob.properties.last_modified, "2024-01-01T00:00:00Z");
+        assert_eq!(blob.properties.content_type, Some("text/plain".to_string()));
+    }
+
+    #[test]
+    fn test_blob_info_deserialization_no_content_type() {
+        let json = r#"{
+            "name": "unknown.bin",
+            "properties": {
+                "contentLength": 2048,
+                "lastModified": "2024-01-02T00:00:00Z"
+            }
+        }"#;
+
+        let blob: BlobInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(blob.name, "unknown.bin");
+        assert_eq!(blob.properties.content_length, 2048);
+        assert_eq!(blob.properties.content_type, None);
+    }
+
+    #[test]
+    fn test_container_info_deserialization() {
+        let json = r#"{
+            "name": "mycontainer",
+            "properties": {
+                "lastModified": "2024-01-01T00:00:00Z",
+                "publicAccess": "container"
+            }
+        }"#;
+
+        let container: ContainerInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(container.name, "mycontainer");
+        assert_eq!(container.properties.last_modified, "2024-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn test_container_list_deserialization() {
+        let json = r#"[
+            {
+                "name": "container1",
+                "properties": {
+                    "lastModified": "2024-01-01T00:00:00Z"
+                }
+            },
+            {
+                "name": "container2",
+                "properties": {
+                    "lastModified": "2024-01-02T00:00:00Z"
+                }
+            }
+        ]"#;
+
+        let containers: Vec<ContainerInfo> = serde_json::from_str(json).unwrap();
+        assert_eq!(containers.len(), 2);
+        assert_eq!(containers[0].name, "container1");
+        assert_eq!(containers[1].name, "container2");
+    }
+
+    #[test]
+    fn test_blob_list_deserialization() {
+        let json = r#"[
+            {
+                "name": "file1.txt",
+                "properties": {
+                    "contentLength": 100,
+                    "lastModified": "2024-01-01T00:00:00Z",
+                    "contentType": "text/plain"
+                }
+            },
+            {
+                "name": "dir/file2.txt",
+                "properties": {
+                    "contentLength": 200,
+                    "lastModified": "2024-01-02T00:00:00Z",
+                    "contentType": "text/plain"
+                }
+            }
+        ]"#;
+
+        let blobs: Vec<BlobInfo> = serde_json::from_str(json).unwrap();
+        assert_eq!(blobs.len(), 2);
+        assert_eq!(blobs[0].name, "file1.txt");
+        assert_eq!(blobs[0].properties.content_length, 100);
+        assert_eq!(blobs[1].name, "dir/file2.txt");
+        assert_eq!(blobs[1].properties.content_length, 200);
+    }
+}

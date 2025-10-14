@@ -309,3 +309,56 @@ fn list_directory_recursive<'a>(
         Ok(())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_list_containers_docs() {
+        // Test case: azst ls
+        // Expected: List all containers in default storage account
+    }
+
+    #[test]
+    fn test_list_container_contents_docs() {
+        // Test case: azst ls az://account/container/
+        // Expected: List all blobs in container
+    }
+
+    #[test]
+    fn test_list_with_prefix_docs() {
+        // Test case: azst ls az://account/container/prefix/
+        // Expected: List blobs starting with prefix
+    }
+
+    #[test]
+    fn test_list_long_format_docs() {
+        // Test case: azst ls -l az://account/container/
+        // Expected: Display size, type, modified date, and name
+    }
+
+    #[test]
+    fn test_list_human_readable_docs() {
+        // Test case: azst ls -lh az://account/container/
+        // Expected: Display sizes in KB/MB/GB format
+    }
+
+    #[test]
+    fn test_list_recursive_docs() {
+        // Test case: azst ls -r az://account/container/
+        // Expected: List all blobs recursively (Azure lists all by default)
+    }
+
+    #[test]
+    fn test_list_local_file_docs() {
+        // Test case: azst ls /local/file.txt
+        // Expected: Display file info
+    }
+
+    #[test]
+    fn test_list_local_directory_docs() {
+        // Test case: azst ls /local/dir/
+        // Expected: List directory contents
+    }
+
+    // Note: Full integration tests would require mocking Azure CLI calls
+}

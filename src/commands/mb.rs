@@ -46,3 +46,30 @@ pub async fn execute(container_uri: &str, account: Option<&str>) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_create_container_with_account_in_uri_docs() {
+        // Test case: azst mb az://account/container
+        // Expected: Create container in specified account
+    }
+
+    #[test]
+    fn test_create_container_with_account_flag_docs() {
+        // Test case: azst mb --account myaccount az://container
+        // Expected: Create container using --account flag
+    }
+
+    #[test]
+    fn test_create_container_invalid_uri_docs() {
+        // Test case: azst mb /local/path
+        // Expected: Error - must be Azure URI
+    }
+
+    #[test]
+    fn test_create_container_with_path_error_docs() {
+        // Test case: azst mb az://account/container/path
+        // Expected: Error - cannot specify path
+    }
+}

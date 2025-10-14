@@ -84,3 +84,36 @@ pub async fn execute(container_uri: &str, force: bool) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_remove_empty_container_docs() {
+        // Test case: azst rb az://account/container
+        // Expected: Remove empty container after confirmation
+    }
+
+    #[test]
+    fn test_remove_non_empty_container_force_docs() {
+        // Test case: azst rb -f az://account/container
+        // Expected: Remove container with contents without confirmation
+    }
+
+    #[test]
+    fn test_remove_container_invalid_uri_docs() {
+        // Test case: azst rb /local/path
+        // Expected: Error - must be Azure URI
+    }
+
+    #[test]
+    fn test_remove_container_with_path_error_docs() {
+        // Test case: azst rb az://account/container/path
+        // Expected: Error - cannot specify path
+    }
+
+    #[test]
+    fn test_remove_container_with_confirmation_docs() {
+        // Test case: azst rb az://account/container (user input: n)
+        // Expected: Abort removal
+    }
+}

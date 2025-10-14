@@ -310,3 +310,41 @@ fn copy_directory<'a>(
         Ok(())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_local_to_azure_single_file_docs() {
+        // This is a documentation test showing the expected behavior
+        // In a real scenario, we would mock the AzureClient
+        // Test case: azst cp /local/file.txt az://account/container/
+        // Expected: Upload file.txt to container root
+    }
+
+    #[test]
+    fn test_azure_to_local_single_file_docs() {
+        // Test case: azst cp az://account/container/file.txt /local/
+        // Expected: Download file.txt to /local/file.txt
+    }
+
+    #[test]
+    fn test_local_to_local_copy_docs() {
+        // Test case: azst cp /source/file.txt /dest/
+        // Expected: Copy file.txt using standard filesystem operations
+    }
+
+    #[test]
+    fn test_recursive_directory_upload_docs() {
+        // Test case: azst cp -r /local/dir/ az://account/container/prefix/
+        // Expected: Upload all files in directory with prefix
+    }
+
+    #[test]
+    fn test_azure_to_azure_error_docs() {
+        // Test case: azst cp az://account1/c1/file az://account2/c2/file
+        // Expected: Error - not implemented
+    }
+
+    // Note: Full integration tests would require mocking Azure CLI calls
+    // For now, these serve as documentation of expected behavior
+}

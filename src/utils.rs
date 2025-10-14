@@ -212,5 +212,88 @@ mod tests {
         assert_eq!(format_size(1024), "1.0 KB");
         assert_eq!(format_size(1536), "1.5 KB");
         assert_eq!(format_size(1048576), "1.0 MB");
+        assert_eq!(format_size(1073741824), "1.0 GB");
+        assert_eq!(format_size(1099511627776), "1.0 TB");
+        assert_eq!(format_size(0), "0 B");
+    }
+
+    #[test]
+    fn test_get_filename() {
+        // Local paths
+        assert_eq!(get_filename("/path/to/file.txt"), "file.txt");
+        assert_eq!(get_filename("/path/to/dir/"), "dir");
+        assert_eq!(get_filename("file.txt"), "file.txt");
+        assert_eq!(get_filename("/"), "/"); // Root returns itself
+
+        // Azure URIs
+        assert_eq!(
+            get_filename("az://account/container/path/to/file.txt"),
+            "file.txt"
+        );
+        assert_eq!(get_filename("az://account/container/file.txt"), "file.txt");
+        assert_eq!(get_filename("az://account/container/"), "");
+        assert_eq!(get_filename("az://account/container"), "");
+    }
+
+    #[test]
+    fn test_get_parent_dir() {
+        assert_eq!(
+            get_parent_dir("/path/to/file.txt"),
+            Some("/path/to".to_string())
+        );
+        assert_eq!(get_parent_dir("/path/to/"), Some("/path".to_string()));
+        assert_eq!(get_parent_dir("file.txt"), Some("".to_string()));
+        assert_eq!(get_parent_dir("/"), None);
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        assert_eq!(normalize_path("/path/to/file/"), "/path/to/file");
+        assert_eq!(normalize_path("/path/to/file"), "/path/to/file");
+        assert_eq!(normalize_path("/"), "/");
+        assert_eq!(normalize_path("//"), ""); // Multiple slashes trimmed
+    }
+
+    #[test]
+    fn test_parse_azure_uri_edge_cases() {
+        // Empty path components
+        let (account, container, path) = parse_azure_uri("az://account/container//").unwrap();
+        assert_eq!(account, Some("account".to_string()));
+        assert_eq!(container, "container");
+        assert_eq!(path, Some("/".to_string())); // Double slash results in "/"
+
+        // Deep nested paths
+        let (account, container, path) =
+            parse_azure_uri("az://myaccount/mycontainer/a/b/c/d/e/file.txt").unwrap();
+        assert_eq!(account, Some("myaccount".to_string()));
+        assert_eq!(container, "mycontainer");
+        assert_eq!(path, Some("a/b/c/d/e/file.txt".to_string()));
+
+        // Special characters in blob name
+        let (account, container, path) =
+            parse_azure_uri("az://myaccount/mycontainer/file-name_2024.txt").unwrap();
+        assert_eq!(account, Some("myaccount".to_string()));
+        assert_eq!(container, "mycontainer");
+        assert_eq!(path, Some("file-name_2024.txt".to_string()));
+    }
+
+    #[test]
+    fn test_is_storage_account_name_edge_cases() {
+        // Boundary cases
+        assert!(is_storage_account_name("abc")); // exactly 3 chars
+        assert!(is_storage_account_name("abcdefghij1234567890abcd")); // exactly 24 chars
+        assert!(!is_storage_account_name("ab")); // too short
+        assert!(!is_storage_account_name("abcdefghij1234567890abcde")); // too long
+
+        // Mixed valid characters
+        assert!(is_storage_account_name("abc123"));
+        assert!(is_storage_account_name("123abc"));
+        assert!(is_storage_account_name("a1b2c3"));
+
+        // Invalid characters
+        assert!(!is_storage_account_name("abc-123")); // hyphen
+        assert!(!is_storage_account_name("abc.123")); // dot
+        assert!(!is_storage_account_name("abc 123")); // space
+        assert!(!is_storage_account_name("ABC")); // uppercase
     }
 }
