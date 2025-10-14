@@ -79,7 +79,10 @@ The binary will be installed to `~/.cargo/bin/azst` (make sure this directory is
 ### Basic Commands
 
 ```bash
-# List all containers
+# List all storage accounts (like gsutil ls)
+azst ls
+
+# List all containers in a storage account
 azst ls az://myaccount/
 
 # List objects in a container
@@ -133,6 +136,7 @@ Azure URIs follow the format: `az://<storage-account>/<container>/path/to/object
 
 This convention is specific to `azst` and provides a self-contained way to reference Azure storage resources:
 
+- `azst ls` - List all storage accounts (similar to `gsutil ls`)
 - `az://myaccount/` - List all containers in storage account
 - `az://myaccount/mycontainer/` - List all objects in container
 - `az://myaccount/mycontainer/prefix/` - List objects with prefix

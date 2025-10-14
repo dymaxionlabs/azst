@@ -22,15 +22,38 @@ pub async fn execute(
         }
         Some(p) => list_local_path(p, long, human_readable, recursive).await,
         None => {
-            // List all containers - requires Azure
-            let mut azure_client = AzureClient::new();
-            if let Some(account_name) = account {
-                azure_client = azure_client.with_storage_account(account_name);
-            }
+            // List all storage accounts - requires Azure
+            let azure_client = AzureClient::new();
             azure_client.check_prerequisites().await?;
-            list_containers(long, &azure_client).await
+            list_storage_accounts(long, &azure_client).await
         }
     }
+}
+
+async fn list_storage_accounts(long: bool, azure_client: &AzureClient) -> Result<()> {
+    let accounts = azure_client.list_storage_accounts().await?;
+
+    if accounts.is_empty() {
+        println!("No storage accounts found");
+        return Ok(());
+    }
+
+    println!("{}", "Azure Storage Accounts:".bold());
+
+    for account in accounts {
+        if long {
+            println!(
+                "{:<30} {:<15} {}",
+                format!("az://{}/", account.name).cyan(),
+                account.location.dimmed(),
+                account.resource_group.yellow()
+            );
+        } else {
+            println!("{}", format!("az://{}/", account.name).cyan());
+        }
+    }
+
+    Ok(())
 }
 
 async fn list_containers(long: bool, azure_client: &AzureClient) -> Result<()> {

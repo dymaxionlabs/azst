@@ -205,6 +205,78 @@ mod ls_command_tests {
             .failure()
             .stderr(predicate::str::contains("does not exist"));
     }
+
+    // Note: The following tests require Azure CLI to be installed and authenticated
+    // They are documented tests that verify the expected behavior
+
+    #[test]
+    #[ignore] // Requires Azure CLI authentication
+    fn test_ls_storage_accounts() {
+        // Test: azst ls
+        // Expected: List all storage accounts in the current subscription
+        // Output format: az://accountname/
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.arg("ls");
+
+        // This test will fail if not authenticated, which is expected
+        // When authenticated, it should list storage accounts with az:// prefix
+        let result = cmd.assert();
+
+        // Check that either we get storage accounts or an authentication error
+        result.stdout(
+            predicate::str::contains("Azure Storage Accounts")
+                .or(predicate::str::contains("az://")),
+        );
+    }
+
+    #[test]
+    #[ignore] // Requires Azure CLI authentication
+    fn test_ls_storage_accounts_long_format() {
+        // Test: azst ls -l
+        // Expected: List storage accounts with location and resource group
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["ls", "-l"]);
+
+        let result = cmd.assert();
+
+        // Should show accounts with additional columns (location, resource group)
+        result.stdout(
+            predicate::str::contains("Azure Storage Accounts")
+                .or(predicate::str::contains("az://")),
+        );
+    }
+
+    #[test]
+    #[ignore] // Requires Azure CLI authentication
+    fn test_ls_containers_for_account() {
+        // Test: azst ls az://accountname/
+        // Expected: List all containers in the specified storage account
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["ls", "az://testaccount/"]);
+
+        // This will fail with an error if the account doesn't exist or user isn't authenticated
+        // When successful, it should list containers
+        let result = cmd.assert();
+
+        // Either shows containers or gives an error about the account
+        result.stdout(
+            predicate::str::contains("Azure Storage Containers")
+                .or(predicate::str::contains("az://")),
+        );
+    }
+
+    #[test]
+    fn test_ls_azure_uri_format_validation() {
+        // Test that Azure URI format is recognized correctly
+        // This test doesn't require Azure CLI as it tests parsing only
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["ls", "az://invalid-account-that-does-not-exist/"]);
+
+        // Should fail with Azure-related error (not path error)
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Azure").or(predicate::str::contains("storage")));
+    }
 }
 
 #[cfg(test)]

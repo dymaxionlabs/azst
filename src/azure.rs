@@ -42,6 +42,17 @@ pub struct ContainerProperties {
     pub public_access: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct StorageAccountInfo {
+    pub name: String,
+    pub location: String,
+    #[serde(rename = "resourceGroup")]
+    pub resource_group: String,
+    #[serde(rename = "creationTime")]
+    #[allow(dead_code)]
+    pub creation_time: String,
+}
+
 #[derive(Clone)]
 pub struct AzureClient {
     config: AzureConfig,
@@ -114,6 +125,28 @@ impl AzureClient {
         }
 
         Ok(None)
+    }
+
+    /// List storage accounts in the current resource group or subscription
+    pub async fn list_storage_accounts(&self) -> Result<Vec<StorageAccountInfo>> {
+        let mut cmd = AsyncCommand::new("az");
+        cmd.args(["storage", "account", "list", "--output", "json"]);
+
+        let output = cmd
+            .output()
+            .await
+            .context("Failed to execute az storage account list")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Azure CLI error: {}", stderr));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let accounts: Vec<StorageAccountInfo> =
+            serde_json::from_str(&stdout).context("Failed to parse storage account list JSON")?;
+
+        Ok(accounts)
     }
 
     /// List containers in the storage account
@@ -457,5 +490,48 @@ mod tests {
         assert_eq!(blobs[0].properties.content_length, 100);
         assert_eq!(blobs[1].name, "dir/file2.txt");
         assert_eq!(blobs[1].properties.content_length, 200);
+    }
+
+    #[test]
+    fn test_storage_account_info_deserialization() {
+        let json = r#"{
+            "name": "mystorageaccount",
+            "location": "eastus2",
+            "resourceGroup": "my-resource-group",
+            "creationTime": "2024-01-01T00:00:00.000000+00:00"
+        }"#;
+
+        let account: StorageAccountInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(account.name, "mystorageaccount");
+        assert_eq!(account.location, "eastus2");
+        assert_eq!(account.resource_group, "my-resource-group");
+        assert_eq!(account.creation_time, "2024-01-01T00:00:00.000000+00:00");
+    }
+
+    #[test]
+    fn test_storage_account_list_deserialization() {
+        let json = r#"[
+            {
+                "name": "account1",
+                "location": "eastus",
+                "resourceGroup": "rg1",
+                "creationTime": "2024-01-01T00:00:00.000000+00:00"
+            },
+            {
+                "name": "account2",
+                "location": "westus",
+                "resourceGroup": "rg2",
+                "creationTime": "2024-01-02T00:00:00.000000+00:00"
+            }
+        ]"#;
+
+        let accounts: Vec<StorageAccountInfo> = serde_json::from_str(json).unwrap();
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].name, "account1");
+        assert_eq!(accounts[0].location, "eastus");
+        assert_eq!(accounts[0].resource_group, "rg1");
+        assert_eq!(accounts[1].name, "account2");
+        assert_eq!(accounts[1].location, "westus");
+        assert_eq!(accounts[1].resource_group, "rg2");
     }
 }
