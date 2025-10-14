@@ -13,19 +13,20 @@ pub async fn execute(
     recursive: bool,
     parallel: u32,
 ) -> Result<()> {
-    let azure_client = AzureClient::new();
-    azure_client.check_prerequisites().await?;
-
     let source_is_azure = is_azure_uri(source);
     let dest_is_azure = is_azure_uri(destination);
 
     match (source_is_azure, dest_is_azure) {
         (false, true) => {
             // Local to Azure
+            let azure_client = AzureClient::new();
+            azure_client.check_prerequisites().await?;
             upload_to_azure(source, destination, recursive, parallel, &azure_client).await
         }
         (true, false) => {
             // Azure to Local
+            let azure_client = AzureClient::new();
+            azure_client.check_prerequisites().await?;
             download_from_azure(source, destination, recursive, parallel, &azure_client).await
         }
         (true, true) => {

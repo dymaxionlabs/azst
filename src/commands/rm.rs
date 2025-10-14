@@ -6,10 +6,9 @@ use crate::azure::AzureClient;
 use crate::utils::{is_azure_uri, parse_azure_uri};
 
 pub async fn execute(path: &str, recursive: bool, force: bool) -> Result<()> {
-    let azure_client = AzureClient::new();
-    azure_client.check_prerequisites().await?;
-
     if is_azure_uri(path) {
+        let azure_client = AzureClient::new();
+        azure_client.check_prerequisites().await?;
         remove_azure_object(path, recursive, force, &azure_client).await
     } else {
         remove_local_path(path, recursive, force).await

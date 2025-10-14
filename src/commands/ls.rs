@@ -11,21 +11,23 @@ pub async fn execute(
     recursive: bool,
     account: Option<&str>,
 ) -> Result<()> {
-    let mut azure_client = AzureClient::new();
-
-    if let Some(account_name) = account {
-        azure_client = azure_client.with_storage_account(account_name);
-    }
-
-    azure_client.check_prerequisites().await?;
-
     match path {
         Some(p) if is_azure_uri(p) => {
+            let mut azure_client = AzureClient::new();
+            if let Some(account_name) = account {
+                azure_client = azure_client.with_storage_account(account_name);
+            }
+            azure_client.check_prerequisites().await?;
             list_azure_objects(p, long, human_readable, recursive, &azure_client).await
         }
         Some(p) => list_local_path(p, long, human_readable, recursive).await,
         None => {
-            // List all containers
+            // List all containers - requires Azure
+            let mut azure_client = AzureClient::new();
+            if let Some(account_name) = account {
+                azure_client = azure_client.with_storage_account(account_name);
+            }
+            azure_client.check_prerequisites().await?;
             list_containers(long, &azure_client).await
         }
     }
