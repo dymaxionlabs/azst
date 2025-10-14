@@ -1,0 +1,26 @@
+[package]
+name = "azst"
+version = "0.1.0"
+edition = "2021"
+authors = ["Damián Silvani <munshkr@gmail.com>"]
+description = "A Rust CLI tool that wraps Azure CLI for easier storage container management"
+readme = "README.md"
+homepage = "https://github.com/munshkr/azst"
+repository = "https://github.com/munshkr/azst"
+license = "MIT"
+keywords = ["azure", "storage", "cli", "cloud"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "azst"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+colored = "2.0"
+indicatif = "0.17"
+dirs = "5.0"
