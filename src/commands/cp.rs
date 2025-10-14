@@ -84,12 +84,11 @@ async fn copy_with_azcopy(
         "{} {}",
         "⚙".dimmed(),
         format!(
-            "azcopy copy '{}' '{}'{}",
+            "azcopy copy '{}' '{}'{} --output-type json",
             source_url, dest_url, recursive_flag
         )
         .dimmed()
     );
-    println!(); // Blank line before AzCopy output
 
     // Use AzCopy for the operation
     let azcopy = AzCopyClient::new();

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 
+mod azcopy_output;
 mod azure;
 mod cli;
 mod commands;

@@ -622,25 +622,41 @@ impl AzCopyClient {
             cmd.args(["--cap-mbps", "0"]); // No bandwidth cap by default
         }
 
+        // Use JSON output for better parsing
+        cmd.args(["--output-type", "json"]);
+
         // IMPORTANT: Tell AzCopy to use Azure CLI credentials for authentication
         // This is set via environment variable
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
-        // Inherit stdout/stderr so user sees real-time progress
-        // This gives us the nice AzCopy progress bar
-        cmd.stdout(std::process::Stdio::inherit());
-        cmd.stderr(std::process::Stdio::inherit());
+        // Capture stdout to parse JSON output
+        // All azcopy output goes to stdout with --output-type json
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::null()); // Discard stderr
 
-        let status = cmd
-            .status()
-            .await
-            .context("Failed to execute azcopy copy")?;
+        let mut child = cmd.spawn().context("Failed to execute azcopy copy")?;
 
+        // Process stdout
+        let failed_count = if let Some(stdout) = child.stdout.take() {
+            crate::azcopy_output::handle_azcopy_output(stdout).await?
+        } else {
+            0
+        };
+
+        let status = child.wait().await.context("Failed to wait for azcopy")?;
+
+        // Exit code 1 with failed transfers is expected - show warning but don't fail
         if !status.success() {
-            return Err(anyhow!(
-                "AzCopy operation failed with exit code: {}",
-                status.code().unwrap_or(-1)
-            ));
+            if failed_count > 0 {
+                // CompletedWithErrors - warning already shown, don't fail the operation
+                return Ok(());
+            } else {
+                // Actual failure
+                return Err(anyhow!(
+                    "AzCopy operation failed with exit code: {}",
+                    status.code().unwrap_or(-1)
+                ));
+            }
         }
 
         Ok(())
