@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::{cp, ls, mb, rb, rm};
+use crate::commands::{cp, ls, rm};
 
 #[derive(Parser)]
 #[command(name = "azst")]
@@ -55,22 +55,6 @@ pub enum Commands {
         #[arg(short, long)]
         force: bool,
     },
-    /// Make bucket/container (like gsutil mb)
-    Mb {
-        /// Container name to create (az://container-name)
-        container: String,
-        /// Storage account name
-        #[arg(short, long)]
-        account: Option<String>,
-    },
-    /// Remove bucket/container (like gsutil rb)
-    Rb {
-        /// Container name to remove (az://container-name)
-        container: String,
-        /// Force removal of non-empty container
-        #[arg(short, long)]
-        force: bool,
-    },
 }
 
 impl Cli {
@@ -103,8 +87,6 @@ impl Cli {
                 recursive,
                 force,
             } => rm::execute(path, *recursive, *force).await,
-            Commands::Mb { container, account } => mb::execute(container, account.as_deref()).await,
-            Commands::Rb { container, force } => rb::execute(container, *force).await,
         }
     }
 }

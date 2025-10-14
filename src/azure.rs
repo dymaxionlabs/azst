@@ -317,50 +317,6 @@ impl AzureClient {
 
         Ok(())
     }
-
-    /// Create a container
-    pub async fn create_container(&self, container: &str) -> Result<()> {
-        let mut cmd = AsyncCommand::new("az");
-        cmd.args(["storage", "container", "create", "--name", container]);
-
-        if let Some(ref account) = self.config.storage_account {
-            cmd.args(["--account-name", account]);
-        }
-
-        let output = cmd
-            .output()
-            .await
-            .context("Failed to execute az storage container create")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Container creation failed: {}", stderr));
-        }
-
-        Ok(())
-    }
-
-    /// Delete a container
-    pub async fn delete_container(&self, container: &str) -> Result<()> {
-        let mut cmd = AsyncCommand::new("az");
-        cmd.args(["storage", "container", "delete", "--name", container]);
-
-        if let Some(ref account) = self.config.storage_account {
-            cmd.args(["--account-name", account]);
-        }
-
-        let output = cmd
-            .output()
-            .await
-            .context("Failed to execute az storage container delete")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Container deletion failed: {}", stderr));
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

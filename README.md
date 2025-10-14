@@ -11,8 +11,6 @@ A Rust CLI tool that wraps the Azure CLI to provide easier Azure Blob Storage ma
 - **cp** - Copy files to/from Azure storage with `cp` semantics
 - **ls** - List objects in Azure storage with detailed information
 - **rm** - Remove objects from Azure storage
-- **mb** - Create storage containers (make bucket)
-- **rb** - Remove storage containers (remove bucket)
 - **Recursive operations** with `-r` flag
 - **Human-readable file sizes** with `-h` flag
 - **Parallel uploads/downloads** for better performance
@@ -105,12 +103,6 @@ azst rm az://myaccount/mycontainer/file.txt
 
 # Remove all objects with prefix (recursive)
 azst rm -r az://myaccount/mycontainer/prefix/
-
-# Create container
-azst mb az://myaccount/new-container
-
-# Remove container
-azst rb az://myaccount/old-container
 ```
 
 ### Advanced Usage
@@ -121,13 +113,9 @@ azst cp -r -j 8 /large/directory/ az://mycontainer/
 
 # Force operations without confirmation
 azst rm -rf az://myaccount/mycontainer/prefix/
-azst rb -f az://myaccount/container-to-delete
 
 # List with human-readable sizes
 azst ls -lh az://myaccount/mycontainer/
-
-# Use specific storage account
-azst mb az://mystorageaccount/new-container
 ```
 
 ### URI Format
@@ -217,15 +205,13 @@ This project is licensed under the MIT or Apache-2.0 license.
 
 ## Comparison with gsutil
 
-| gsutil      | azst           | Description             |
-| ----------- | -------------- | ----------------------- |
-| `gs://`     | `az://`        | URI scheme              |
-| `gsutil cp` | `azst cp`      | Copy files              |
-| `gsutil ls` | `azst ls`      | List objects            |
-| `gsutil rm` | `azst rm`      | Remove objects          |
-| `gsutil mb` | `azst mb`      | Make bucket/container   |
-| `gsutil rb` | `azst rb`      | Remove bucket/container |
-| `gsutil -m` | `azst cp -j N` | Parallel operations     |
+| gsutil      | azst           | Description         |
+| ----------- | -------------- | ------------------- |
+| `gs://`     | `az://`        | URI scheme          |
+| `gsutil cp` | `azst cp`      | Copy files          |
+| `gsutil ls` | `azst ls`      | List objects        |
+| `gsutil rm` | `azst rm`      | Remove objects      |
+| `gsutil -m` | `azst cp -j N` | Parallel operations |
 
 The tool aims to provide familiar gsutil-like semantics for Azure Blob Storage operations.
 
