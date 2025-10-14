@@ -28,17 +28,17 @@ A Rust CLI tool that wraps the Azure CLI to provide easier Azure Blob Storage ma
 
 ### Quick Install (Recommended)
 
-Install the latest release using curl:
+Install the latest build using curl:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.sh | bash
 ```
 
-This will download and install the appropriate binary for your system to `~/.local/bin/`.
+This will download and install the latest binary from the `main` branch for your system to `~/.local/bin/`.
 
 ### Manual Installation
 
-Download the latest release for your platform from the [releases page](https://github.com/dymaxionlabs/azst/releases).
+Download the latest build for your platform from the [releases page](https://github.com/dymaxionlabs/azst/releases/tag/latest).
 
 #### macOS / Linux
 
@@ -73,10 +73,6 @@ cargo install --path .
 ```
 
 The binary will be installed to `~/.cargo/bin/azst` (make sure this directory is in your PATH).
-
-### Development Build
-
-```bash
 
 ## Usage
 

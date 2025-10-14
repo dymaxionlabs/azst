@@ -2,16 +2,29 @@
 set -e
 
 # azst installation script
-# Usage: curl -sSL https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.sh | bash
+# Usage:
+#   Stable:      curl -sSL https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.sh | bash
+#   Development: curl -sSL https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.sh | bash -s -- --dev
 
 REPO="dymaxionlabs/azst"
 BINARY_NAME="azst"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
+# Parse arguments
+DEV_BUILD=false
+for arg in "$@"; do
+    case $arg in
+        --dev|--development|--latest)
+            DEV_BUILD=true
+            ;;
+    esac
+done
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Detect OS and architecture
@@ -19,6 +32,11 @@ OS="$(uname -s)"
 ARCH="$(uname -m)"
 
 echo -e "${GREEN}azst installer${NC}"
+if [ "$DEV_BUILD" = true ]; then
+    echo -e "${BLUE}Installing development build from main branch${NC}"
+else
+    echo "Installing stable release"
+fi
 echo ""
 
 case "$OS" in
@@ -61,14 +79,22 @@ fi
 
 # Get latest release version
 echo "Fetching latest release..."
-LATEST_VERSION=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
-if [ -z "$LATEST_VERSION" ]; then
-    echo -e "${RED}Error: Could not determine latest version${NC}"
-    exit 1
+if [ "$DEV_BUILD" = true ]; then
+    # Use the 'latest' prerelease tag for development builds
+    LATEST_VERSION="latest"
+    echo -e "${BLUE}Using development build (main branch)${NC}"
+else
+    # Get the latest stable release
+    LATEST_VERSION=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+    if [ -z "$LATEST_VERSION" ]; then
+        echo -e "${RED}Error: Could not determine latest version${NC}"
+        exit 1
+    fi
+
+    echo "Latest version: $LATEST_VERSION"
 fi
-
-echo "Latest version: $LATEST_VERSION"
 
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST_VERSION}/${ARCHIVE_NAME}"
 
