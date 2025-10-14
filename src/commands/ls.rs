@@ -66,15 +66,23 @@ async fn list_containers(long: bool, azure_client: &AzureClient) -> Result<()> {
 
     println!("{}", "Azure Storage Containers:".bold());
 
+    // Get the account name from the client
+    let account_name = azure_client
+        .get_storage_account()
+        .ok_or_else(|| anyhow!("Storage account not configured"))?;
+
     for container in containers {
         if long {
             println!(
                 "{:<30} {}",
-                format!("az://{}/", container.name).cyan(),
+                format!("az://{}/{}/", account_name, container.name).cyan(),
                 container.properties.last_modified.dimmed()
             );
         } else {
-            println!("{}", format!("az://{}/", container.name).cyan());
+            println!(
+                "{}",
+                format!("az://{}/{}/", account_name, container.name).cyan()
+            );
         }
     }
 

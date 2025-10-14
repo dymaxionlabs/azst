@@ -49,12 +49,29 @@ async fn upload_to_azure(
 ) -> Result<()> {
     let (account, dest_container, dest_path) = parse_azure_uri(destination)?;
 
+    // Validate that we have a container specified
+    if dest_container.is_empty() {
+        return Err(anyhow!(
+            "Invalid destination URI '{}'. You must specify both storage account and container: az://<account>/<container>/[path]",
+            destination
+        ));
+    }
+
     // Create azure client with account if specified in URI
-    let client = if let Some(account_name) = account {
+    let client = if let Some(account_name) = account.clone() {
         AzureClient::new().with_storage_account(&account_name)
     } else {
         azure_client.clone()
     };
+
+    // Warn if using legacy format without account
+    if account.is_none() && client.get_storage_account().is_none() {
+        eprintln!(
+            "{} Using legacy URI format '{}'. Consider using the full format 'az://<account>/<container>' for better clarity.",
+            "⚠".yellow(),
+            destination.yellow()
+        );
+    }
 
     if !path_exists(source) {
         return Err(anyhow!("Source path '{}' does not exist", source));
@@ -68,7 +85,18 @@ async fn upload_to_azure(
         }
 
         // Upload directory recursively
-        upload_directory(source, &dest_container, dest_path.as_deref(), &client).await
+        let account_name = account
+            .as_ref()
+            .map(|s| s.as_str())
+            .or_else(|| client.get_storage_account());
+        upload_directory(
+            source,
+            &dest_container,
+            dest_path.as_deref(),
+            account_name,
+            &client,
+        )
+        .await
     } else {
         // Upload single file
         let blob_name = if let Some(path) = dest_path {
@@ -81,12 +109,22 @@ async fn upload_to_azure(
             get_filename(source)
         };
 
+        // Build full destination path for display
+        let account_name = account
+            .as_ref()
+            .map(|s| s.as_str())
+            .or_else(|| client.get_storage_account());
+        let dest_display = if let Some(acct) = account_name {
+            format!("az://{}/{}/{}", acct, dest_container, blob_name)
+        } else {
+            format!("az://{}/{}", dest_container, blob_name)
+        };
+
         println!(
-            "{} Uploading {} to az://{}/{}",
+            "{} Uploading {} to {}",
             "→".green(),
             source.cyan(),
-            dest_container.yellow(),
-            blob_name.cyan()
+            dest_display.cyan()
         );
 
         client
@@ -101,6 +139,7 @@ fn upload_directory<'a>(
     dir_path: &'a str,
     container: &'a str,
     base_path: Option<&'a str>,
+    account_name: Option<&'a str>,
     azure_client: &'a AzureClient,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
     Box::pin(async move {
@@ -120,15 +159,27 @@ fn upload_directory<'a>(
 
             if entry_path.is_dir() {
                 // Recursively upload subdirectory
-                upload_directory(entry_str, container, Some(&blob_name), azure_client).await?;
+                upload_directory(
+                    entry_str,
+                    container,
+                    Some(&blob_name),
+                    account_name,
+                    azure_client,
+                )
+                .await?;
             } else {
                 // Upload file
+                let dest_display = if let Some(acct) = account_name {
+                    format!("az://{}/{}/{}", acct, container, blob_name)
+                } else {
+                    format!("az://{}/{}", container, blob_name)
+                };
+
                 println!(
-                    "{} Uploading {} to az://{}/{}",
+                    "{} Uploading {} to {}",
                     "→".green(),
                     entry_str.cyan(),
-                    container.yellow(),
-                    blob_name.cyan()
+                    dest_display.cyan()
                 );
 
                 azure_client
@@ -150,17 +201,45 @@ async fn download_from_azure(
 ) -> Result<()> {
     let (account, source_container, source_path) = parse_azure_uri(source)?;
 
+    // Validate that we have a container specified
+    if source_container.is_empty() {
+        return Err(anyhow!(
+            "Invalid source URI '{}'. You must specify both storage account and container: az://<account>/<container>/[path]",
+            source
+        ));
+    }
+
     // Create azure client with account if specified in URI
-    let client = if let Some(account_name) = account {
+    let client = if let Some(account_name) = account.clone() {
         AzureClient::new().with_storage_account(&account_name)
     } else {
         azure_client.clone()
     };
 
+    // Warn if using legacy format without account
+    if account.is_none() && client.get_storage_account().is_none() {
+        eprintln!(
+            "{} Using legacy URI format '{}'. Consider using the full format 'az://<account>/<container>' for better clarity.",
+            "⚠".yellow(),
+            source.yellow()
+        );
+    }
+
     if let Some(path) = source_path {
         if path.ends_with('/') || recursive {
             // Download directory/prefix
-            download_directory(&source_container, Some(&path), destination, &client).await
+            let account_name = account
+                .as_ref()
+                .map(|s| s.as_str())
+                .or_else(|| client.get_storage_account());
+            download_directory(
+                &source_container,
+                Some(&path),
+                destination,
+                account_name,
+                &client,
+            )
+            .await
         } else {
             // Download single blob
             let dest_path = if is_directory(destination) {
@@ -178,11 +257,20 @@ async fn download_from_azure(
                 fs::create_dir_all(parent).await?;
             }
 
+            let account_name = account
+                .as_ref()
+                .map(|s| s.as_str())
+                .or_else(|| client.get_storage_account());
+            let source_display = if let Some(acct) = account_name {
+                format!("az://{}/{}/{}", acct, source_container, path)
+            } else {
+                format!("az://{}/{}", source_container, path)
+            };
+
             println!(
-                "{} Downloading az://{}/{} to {}",
+                "{} Downloading {} to {}",
                 "←".blue(),
-                source_container.yellow(),
-                path.cyan(),
+                source_display.cyan(),
                 dest_path.cyan()
             );
 
@@ -197,7 +285,11 @@ async fn download_from_azure(
         if !recursive {
             return Err(anyhow!("Downloading entire container requires -r flag"));
         }
-        download_directory(&source_container, None, destination, &client).await
+        let account_name = account
+            .as_ref()
+            .map(|s| s.as_str())
+            .or_else(|| client.get_storage_account());
+        download_directory(&source_container, None, destination, account_name, &client).await
     }
 }
 
@@ -205,6 +297,7 @@ async fn download_directory(
     container: &str,
     prefix: Option<&str>,
     dest_dir: &str,
+    account_name: Option<&str>,
     azure_client: &AzureClient,
 ) -> Result<()> {
     let blobs = azure_client.list_blobs(container, prefix).await?;
@@ -226,11 +319,16 @@ async fn download_directory(
             fs::create_dir_all(parent).await?;
         }
 
+        let source_display = if let Some(acct) = account_name {
+            format!("az://{}/{}/{}", acct, container, blob.name)
+        } else {
+            format!("az://{}/{}", container, blob.name)
+        };
+
         println!(
-            "{} Downloading az://{}/{} to {}",
+            "{} Downloading {} to {}",
             "←".blue(),
-            container.yellow(),
-            blob.name.cyan(),
+            source_display.cyan(),
             dest_path.cyan()
         );
 

@@ -73,6 +73,11 @@ impl AzureClient {
         self
     }
 
+    /// Get the configured storage account name
+    pub fn get_storage_account(&self) -> Option<&str> {
+        self.config.storage_account.as_deref()
+    }
+
     /// Check if Azure CLI is installed and user is logged in
     pub async fn check_prerequisites(&self) -> Result<()> {
         // Check if az CLI is installed
@@ -245,7 +250,43 @@ impl AzureClient {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Upload failed: {}", stderr));
+
+            // Parse common errors and provide user-friendly messages
+            if stderr.contains("Storage account") && stderr.contains("not found") {
+                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
+                return Err(anyhow!(
+                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
+                    account_name
+                ));
+            } else if stderr.contains("container") && stderr.contains("not found") {
+                return Err(anyhow!(
+                    "Container '{}' not found. Please create the container first or verify the name.",
+                    container
+                ));
+            } else if stderr.contains("resource name length is not within the permissible limits")
+                || stderr.contains("OutOfRangeInput")
+            {
+                return Err(anyhow!(
+                    "Invalid container name '{}'. Container names must be 3-63 characters long, lowercase letters, numbers, and hyphens only.",
+                    container
+                ));
+            } else if stderr.contains("The specified container does not exist") {
+                return Err(anyhow!(
+                    "Container '{}' does not exist. Please create the container first.",
+                    container
+                ));
+            } else if stderr.contains("does not have the required permissions") {
+                return Err(anyhow!(
+                    "Permission denied. You don't have the required permissions to upload to this storage account."
+                ));
+            } else if stderr.contains("AuthenticationFailed") {
+                return Err(anyhow!(
+                    "Authentication failed. Please verify your Azure credentials and permissions."
+                ));
+            }
+
+            // For other errors, provide a simplified message
+            return Err(anyhow!("Upload failed: {}", stderr.trim()));
         }
 
         Ok(())
@@ -282,7 +323,51 @@ impl AzureClient {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Download failed: {}", stderr));
+
+            // Parse common errors and provide user-friendly messages
+            if stderr.contains("Storage account") && stderr.contains("not found") {
+                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
+                return Err(anyhow!(
+                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
+                    account_name
+                ));
+            } else if stderr.contains("container") && stderr.contains("not found") {
+                return Err(anyhow!(
+                    "Container '{}' not found. Please verify the container name.",
+                    container
+                ));
+            } else if stderr.contains("resource name length is not within the permissible limits")
+                || stderr.contains("OutOfRangeInput")
+            {
+                return Err(anyhow!(
+                    "Invalid container name '{}'. Container names must be 3-63 characters long, lowercase letters, numbers, and hyphens only.",
+                    container
+                ));
+            } else if stderr.contains("The specified container does not exist") {
+                return Err(anyhow!("Container '{}' does not exist.", container));
+            } else if stderr.contains("blob") && stderr.contains("not found") {
+                return Err(anyhow!(
+                    "Blob '{}' not found in container '{}'.",
+                    blob_name,
+                    container
+                ));
+            } else if stderr.contains("The specified blob does not exist") {
+                return Err(anyhow!(
+                    "Blob '{}' does not exist in container '{}'.",
+                    blob_name,
+                    container
+                ));
+            } else if stderr.contains("does not have the required permissions") {
+                return Err(anyhow!(
+                    "Permission denied. You don't have the required permissions to download from this storage account."
+                ));
+            } else if stderr.contains("AuthenticationFailed") {
+                return Err(anyhow!(
+                    "Authentication failed. Please verify your Azure credentials and permissions."
+                ));
+            }
+
+            return Err(anyhow!("Download failed: {}", stderr.trim()));
         }
 
         Ok(())
@@ -312,7 +397,39 @@ impl AzureClient {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Delete failed: {}", stderr));
+
+            // Parse common errors and provide user-friendly messages
+            if stderr.contains("Storage account") && stderr.contains("not found") {
+                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
+                return Err(anyhow!(
+                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
+                    account_name
+                ));
+            } else if stderr.contains("container") && stderr.contains("not found") {
+                return Err(anyhow!(
+                    "Container '{}' not found. Please verify the container name.",
+                    container
+                ));
+            } else if stderr.contains("resource name length is not within the permissible limits")
+                || stderr.contains("OutOfRangeInput")
+            {
+                return Err(anyhow!(
+                    "Invalid container name '{}'. Container names must be 3-63 characters long, lowercase letters, numbers, and hyphens only.",
+                    container
+                ));
+            } else if stderr.contains("The specified container does not exist") {
+                return Err(anyhow!("Container '{}' does not exist.", container));
+            } else if stderr.contains("does not have the required permissions") {
+                return Err(anyhow!(
+                    "Permission denied. You don't have the required permissions to delete from this storage account."
+                ));
+            } else if stderr.contains("AuthenticationFailed") {
+                return Err(anyhow!(
+                    "Authentication failed. Please verify your Azure credentials and permissions."
+                ));
+            }
+
+            return Err(anyhow!("Delete failed: {}", stderr.trim()));
         }
 
         Ok(())

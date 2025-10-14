@@ -23,6 +23,14 @@ async fn remove_azure_object(
 ) -> Result<()> {
     let (account, container, blob_path) = parse_azure_uri(path)?;
 
+    // Validate that we have a container specified
+    if container.is_empty() {
+        return Err(anyhow!(
+            "Invalid URI '{}'. You must specify both storage account and container: az://<account>/<container>/[path]",
+            path
+        ));
+    }
+
     // Create azure client with account if specified in URI
     let client = if let Some(account_name) = account {
         AzureClient::new().with_storage_account(&account_name)
