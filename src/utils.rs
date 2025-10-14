@@ -27,7 +27,14 @@ pub fn parse_azure_uri(uri: &str) -> Result<(Option<String>, String, Option<Stri
     // Check if this is the new format (account/container/path) or legacy (container/path)
     // Heuristic: if we have 2+ parts and the first part looks like a storage account name
     // (lowercase, no underscores, etc.), assume new format
-    if parts.len() >= 2 && is_storage_account_name(parts[0]) {
+    // Special case: if we have only 1 part and it looks like a storage account, treat it as account
+    if parts.len() == 1 && is_storage_account_name(parts[0]) {
+        // Single component that looks like storage account: az://account or az://account/
+        // This means: list all containers in this account
+        let storage_account = Some(parts[0].to_string());
+        let container = String::new(); // Empty container means list all containers
+        Ok((storage_account, container, None))
+    } else if parts.len() >= 2 && is_storage_account_name(parts[0]) {
         // New format: az://account/container/path
         let storage_account = Some(parts[0].to_string());
         let container = parts[1].to_string();
@@ -165,6 +172,17 @@ mod tests {
             parse_azure_uri("az://samaindevoptimus/dev/uploads/file.txt").unwrap();
         assert_eq!(account, Some("samaindevoptimus".to_string()));
         assert_eq!(container, "dev");
+
+        // Just storage account - should list all containers
+        let (account, container, path) = parse_azure_uri("az://samaindevoptimus").unwrap();
+        assert_eq!(account, Some("samaindevoptimus".to_string()));
+        assert_eq!(container, ""); // Empty means list all containers
+        assert_eq!(path, None);
+
+        let (account, container, path) = parse_azure_uri("az://samaindevoptimus/").unwrap();
+        assert_eq!(account, Some("samaindevoptimus".to_string()));
+        assert_eq!(container, ""); // Empty means list all containers
+        assert_eq!(path, None);
     }
 
     #[test]

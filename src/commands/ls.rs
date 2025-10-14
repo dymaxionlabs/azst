@@ -66,11 +66,17 @@ async fn list_azure_objects(
     let (account, container, prefix) = parse_azure_uri(path)?;
 
     // Create azure client with account if specified in URI
-    let client = if let Some(account_name) = account {
+    let client = if let Some(account_name) = account.clone() {
         AzureClient::new().with_storage_account(&account_name)
     } else {
         azure_client.clone()
     };
+
+    // Special case: If we have an account but no container (az://account or az://account/),
+    // list all containers in that account
+    if account.is_some() && container.is_empty() {
+        return list_containers(long, &client).await;
+    }
 
     // If there's no prefix (just az://account/container or az://account/container/), list container contents
     let prefix = if recursive {
