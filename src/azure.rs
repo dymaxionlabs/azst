@@ -508,6 +508,235 @@ impl AzureClient {
     }
 }
 
+// ============================================================================
+// AzCopy Client - High-performance operations
+// ============================================================================
+
+/// Convert az:// URI to AzCopy-compatible HTTPS URL
+/// Example: az://account/container/path -> https://account.blob.core.windows.net/container/path
+pub fn convert_az_uri_to_url(az_uri: &str) -> Result<String> {
+    if !az_uri.starts_with("az://") {
+        return Err(anyhow!("Invalid Azure URI format. Expected az://..."));
+    }
+
+    let path = &az_uri[5..]; // Remove "az://"
+    let parts: Vec<&str> = path.splitn(3, '/').collect();
+
+    match parts.len() {
+        0 | 1 => Err(anyhow!(
+            "Invalid Azure URI '{}'. Expected format: az://account/container/[path]",
+            az_uri
+        )),
+        2 => {
+            // az://account/container
+            Ok(format!(
+                "https://{}.blob.core.windows.net/{}",
+                parts[0], parts[1]
+            ))
+        }
+        3 => {
+            // az://account/container/path
+            Ok(format!(
+                "https://{}.blob.core.windows.net/{}/{}",
+                parts[0], parts[1], parts[2]
+            ))
+        }
+        _ => Err(anyhow!("Failed to parse Azure URI '{}'", az_uri)),
+    }
+}
+
+#[derive(Clone)]
+pub struct AzCopyClient {
+    config: AzureConfig,
+}
+
+impl AzCopyClient {
+    pub fn new() -> Self {
+        Self {
+            config: AzureConfig {
+                storage_account: None,
+                subscription_id: None,
+            },
+        }
+    }
+
+    pub fn with_storage_account(mut self, account: &str) -> Self {
+        self.config.storage_account = Some(account.to_string());
+        self
+    }
+
+    pub fn get_storage_account(&self) -> Option<&str> {
+        self.config.storage_account.as_deref()
+    }
+
+    /// Check if AzCopy is installed and Azure CLI is authenticated
+    pub async fn check_prerequisites(&self) -> Result<()> {
+        // Check if azcopy is installed
+        let output = AsyncCommand::new("azcopy")
+            .arg("--version")
+            .output()
+            .await
+            .context(
+                "AzCopy not found. Please install AzCopy from https://aka.ms/downloadazcopy",
+            )?;
+
+        if !output.status.success() {
+            return Err(anyhow!("AzCopy is not working properly"));
+        }
+
+        // Check if user is logged in to Azure (azcopy uses Azure CLI credentials)
+        let output = AsyncCommand::new("az")
+            .args(["account", "show"])
+            .output()
+            .await
+            .context("Failed to check Azure login status")?;
+
+        if !output.status.success() {
+            return Err(anyhow!(
+                "Not logged in to Azure. Please run 'az login' first. AzCopy uses Azure CLI credentials."
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Copy files/directories using AzCopy
+    /// Supports local->azure, azure->local, and azure->azure
+    pub async fn copy(
+        &self,
+        source: &str,
+        destination: &str,
+        recursive: bool,
+        max_connections: u32,
+    ) -> Result<()> {
+        let mut cmd = AsyncCommand::new("azcopy");
+        cmd.args(["copy", source, destination]);
+
+        if recursive {
+            cmd.arg("--recursive");
+        }
+
+        // Set number of concurrent connections
+        if max_connections > 0 {
+            cmd.args(["--block-size-mb", "8"]);
+            cmd.args(["--cap-mbps", "0"]); // No bandwidth cap by default
+        }
+
+        // IMPORTANT: Tell AzCopy to use Azure CLI credentials for authentication
+        // This is set via environment variable
+        cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
+
+        // Inherit stdout/stderr so user sees real-time progress
+        // This gives us the nice AzCopy progress bar
+        cmd.stdout(std::process::Stdio::inherit());
+        cmd.stderr(std::process::Stdio::inherit());
+
+        let status = cmd
+            .status()
+            .await
+            .context("Failed to execute azcopy copy")?;
+
+        if !status.success() {
+            return Err(anyhow!(
+                "AzCopy operation failed with exit code: {}",
+                status.code().unwrap_or(-1)
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Sync directories using AzCopy (rsync-like functionality)
+    pub async fn sync(
+        &self,
+        source: &str,
+        destination: &str,
+        delete_destination: bool,
+    ) -> Result<()> {
+        let mut cmd = AsyncCommand::new("azcopy");
+        cmd.args(["sync", source, destination]);
+
+        if delete_destination {
+            cmd.arg("--delete-destination=true");
+        }
+
+        // Use Azure CLI credentials
+        cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
+
+        cmd.arg("--output-type=json");
+
+        let output = cmd
+            .output()
+            .await
+            .context("Failed to execute azcopy sync")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(self.parse_azcopy_error(&stderr));
+        }
+
+        Ok(())
+    }
+
+    /// Remove files/directories using AzCopy
+    pub async fn remove(&self, target: &str, recursive: bool) -> Result<()> {
+        let mut cmd = AsyncCommand::new("azcopy");
+        cmd.args(["remove", target]);
+
+        if recursive {
+            cmd.arg("--recursive");
+        }
+
+        // Use Azure CLI credentials
+        cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
+
+        cmd.arg("--output-type=json");
+
+        let output = cmd
+            .output()
+            .await
+            .context("Failed to execute azcopy remove")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(self.parse_azcopy_error(&stderr));
+        }
+
+        Ok(())
+    }
+
+    /// Parse AzCopy errors and provide user-friendly messages
+    fn parse_azcopy_error(&self, stderr: &str) -> anyhow::Error {
+        if stderr.contains("authentication") || stderr.contains("AuthenticationFailed") {
+            anyhow!(
+                "Authentication failed. Please verify your Azure credentials by running 'az login'."
+            )
+        } else if stderr.contains("AuthorizationPermissionMismatch") {
+            anyhow!(
+                "Permission denied. Your Azure account doesn't have permission to write to this storage account.\n\
+                \n\
+                To fix this, you need one of these roles assigned:\n\
+                  - Storage Blob Data Contributor\n\
+                  - Storage Blob Data Owner\n\
+                \n\
+                Ask your Azure administrator to grant these permissions, or use:\n\
+                  az role assignment create --role \"Storage Blob Data Contributor\" \\\n\
+                    --assignee <your-email> \\\n\
+                    --scope /subscriptions/<subscription-id>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<account>"
+            )
+        } else if stderr.contains("BlobNotFound") || stderr.contains("not found") {
+            anyhow!("Resource not found. Please verify the path and container name.")
+        } else if stderr.contains("ContainerNotFound") {
+            anyhow!("Container not found. Please create the container first or verify the name.")
+        } else if stderr.contains("AccountNotFound") {
+            anyhow!("Storage account not found. Please verify the account name and ensure you have access to it.")
+        } else {
+            // Return the actual error for debugging
+            anyhow!("AzCopy operation failed: {}", stderr.trim())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
