@@ -108,8 +108,11 @@ azst rm -r az://myaccount/mycontainer/prefix/
 ### Advanced Usage
 
 ```bash
-# Copy with parallel uploads (4 parallel by default)
-azst cp -r -j 8 /large/directory/ az://mycontainer/
+# Copy with parallel uploads (default: 4 parallel connections for batch uploads)
+azst cp -r -j 8 /large/directory/ az://myaccount/mycontainer/
+
+# For recursive directory uploads, azst uses Azure CLI's efficient batch upload
+# which uploads multiple files in parallel (similar to gsutil -m cp -r)
 
 # Force operations without confirmation
 azst rm -rf az://myaccount/mycontainer/prefix/
@@ -117,6 +120,15 @@ azst rm -rf az://myaccount/mycontainer/prefix/
 # List with human-readable sizes
 azst ls -lh az://myaccount/mycontainer/
 ```
+
+### Performance Notes
+
+When copying directories recursively with `-r`, `azst` uses Azure CLI's `upload-batch` command which:
+- Uploads multiple files in parallel for significantly faster performance
+- Uses the number specified by `-j` flag as max parallel connections (default: 4)
+- Is much more efficient than uploading files one-by-one
+- Similar to `gsutil -m cp -r` for Google Cloud Storage
+
 
 ### URI Format
 

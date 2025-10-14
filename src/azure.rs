@@ -292,6 +292,78 @@ impl AzureClient {
         Ok(())
     }
 
+    /// Upload a directory to Azure storage using batch upload for better performance
+    pub async fn upload_batch(
+        &self,
+        local_dir: &str,
+        container: &str,
+        destination_path: Option<&str>,
+        max_connections: u32,
+    ) -> Result<()> {
+        let mut cmd = AsyncCommand::new("az");
+        cmd.args([
+            "storage",
+            "blob",
+            "upload-batch",
+            "--source",
+            local_dir,
+            "--destination",
+            container,
+            "--overwrite",
+            "--max-connections",
+            &max_connections.to_string(),
+        ]);
+
+        if let Some(dest_path) = destination_path {
+            cmd.args(["--destination-path", dest_path]);
+        }
+
+        if let Some(ref account) = self.config.storage_account {
+            cmd.args(["--account-name", account]);
+        }
+
+        let output = cmd
+            .output()
+            .await
+            .context("Failed to execute az storage blob upload-batch")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            // Parse common errors and provide user-friendly messages
+            if stderr.contains("Storage account") && stderr.contains("not found") {
+                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
+                return Err(anyhow!(
+                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
+                    account_name
+                ));
+            } else if stderr.contains("container") && stderr.contains("not found") {
+                return Err(anyhow!(
+                    "Container '{}' not found. Please create the container first or verify the name.",
+                    container
+                ));
+            } else if stderr.contains("The specified container does not exist") {
+                return Err(anyhow!(
+                    "Container '{}' does not exist. Please create the container first.",
+                    container
+                ));
+            } else if stderr.contains("does not have the required permissions") {
+                return Err(anyhow!(
+                    "Permission denied. You don't have the required permissions to upload to this storage account."
+                ));
+            } else if stderr.contains("AuthenticationFailed") {
+                return Err(anyhow!(
+                    "Authentication failed. Please verify your Azure credentials and permissions."
+                ));
+            }
+
+            // For other errors, provide a simplified message
+            return Err(anyhow!("Batch upload failed: {}", stderr.trim()));
+        }
+
+        Ok(())
+    }
+
     /// Download a file from Azure storage
     pub async fn download_file(
         &self,

@@ -84,19 +84,40 @@ async fn upload_to_azure(
             ));
         }
 
-        // Upload directory recursively
+        // Upload directory using efficient batch upload
         let account_name = account
             .as_ref()
             .map(|s| s.as_str())
             .or_else(|| client.get_storage_account());
-        upload_directory(
-            source,
-            &dest_container,
-            dest_path.as_deref(),
-            account_name,
-            &client,
-        )
-        .await
+
+        let dest_display = if let Some(acct) = account_name {
+            if let Some(path) = &dest_path {
+                format!("az://{}/{}/{}", acct, dest_container, path)
+            } else {
+                format!("az://{}/{}/", acct, dest_container)
+            }
+        } else {
+            if let Some(path) = &dest_path {
+                format!("az://{}/{}", dest_container, path)
+            } else {
+                format!("az://{}/", dest_container)
+            }
+        };
+
+        println!(
+            "{} Uploading directory {} to {} (using parallel batch upload with {} connections)",
+            "→".green(),
+            source.cyan(),
+            dest_display.cyan(),
+            _parallel
+        );
+
+        client
+            .upload_batch(source, &dest_container, dest_path.as_deref(), _parallel)
+            .await?;
+
+        println!("{} Batch upload completed", "✓".green());
+        Ok(())
     } else {
         // Upload single file
         let blob_name = if let Some(path) = dest_path {
@@ -133,63 +154,6 @@ async fn upload_to_azure(
         println!("{} Upload completed", "✓".green());
         Ok(())
     }
-}
-
-fn upload_directory<'a>(
-    dir_path: &'a str,
-    container: &'a str,
-    base_path: Option<&'a str>,
-    account_name: Option<&'a str>,
-    azure_client: &'a AzureClient,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
-    Box::pin(async move {
-        let mut entries = fs::read_dir(dir_path).await?;
-
-        while let Some(entry) = entries.next_entry().await? {
-            let entry_path = entry.path();
-            let entry_str = entry_path.to_str().unwrap();
-            let filename = entry.file_name();
-            let filename_str = filename.to_str().unwrap();
-
-            let blob_name = if let Some(base) = base_path {
-                format!("{}/{}", base.trim_end_matches('/'), filename_str)
-            } else {
-                filename_str.to_string()
-            };
-
-            if entry_path.is_dir() {
-                // Recursively upload subdirectory
-                upload_directory(
-                    entry_str,
-                    container,
-                    Some(&blob_name),
-                    account_name,
-                    azure_client,
-                )
-                .await?;
-            } else {
-                // Upload file
-                let dest_display = if let Some(acct) = account_name {
-                    format!("az://{}/{}/{}", acct, container, blob_name)
-                } else {
-                    format!("az://{}/{}", container, blob_name)
-                };
-
-                println!(
-                    "{} Uploading {} to {}",
-                    "→".green(),
-                    entry_str.cyan(),
-                    dest_display.cyan()
-                );
-
-                azure_client
-                    .upload_file(entry_str, container, &blob_name)
-                    .await?;
-            }
-        }
-
-        Ok(())
-    })
 }
 
 async fn download_from_azure(
