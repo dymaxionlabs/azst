@@ -24,3 +24,8 @@ anyhow = "1.0"
 colored = "2.0"
 indicatif = "0.17"
 dirs = "5.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"
+tempfile = "3.8"
