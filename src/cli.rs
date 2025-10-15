@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::{cp, ls, rm, sync};
+use crate::commands::{cp, ls, mv, rm, sync};
 
 #[derive(Parser)]
 #[command(name = "azst")]
@@ -43,6 +43,22 @@ pub enum Commands {
         /// Storage account name
         #[arg(short, long)]
         account: Option<String>,
+    },
+    /// Move files to/from Azure storage (like gsutil mv)
+    Mv {
+        /// Source path (local file or az://container/path)
+        source: String,
+        /// Destination path (local file or az://container/path)
+        destination: String,
+        /// Recursive move for directories
+        #[arg(short, long)]
+        recursive: bool,
+        /// Parallel operations
+        #[arg(short = 'j', long, default_value = "4")]
+        parallel: u32,
+        /// Force removal without confirmation
+        #[arg(short, long)]
+        force: bool,
     },
     /// Remove objects from Azure storage (like gsutil rm)
     Rm {
@@ -95,6 +111,13 @@ impl Cli {
                 )
                 .await
             }
+            Commands::Mv {
+                source,
+                destination,
+                recursive,
+                parallel,
+                force,
+            } => mv::execute(source, destination, *recursive, *parallel, *force).await,
             Commands::Rm {
                 path,
                 recursive,
