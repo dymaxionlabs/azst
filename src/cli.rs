@@ -23,9 +23,6 @@ pub enum Commands {
         /// Recursive copy for directories
         #[arg(short, long)]
         recursive: bool,
-        /// Parallel uploads/downloads
-        #[arg(short = 'j', long, default_value = "4")]
-        parallel: u32,
     },
     /// List objects in Azure storage (like gsutil ls)
     Ls {
@@ -53,9 +50,6 @@ pub enum Commands {
         /// Recursive move for directories
         #[arg(short, long)]
         recursive: bool,
-        /// Parallel operations
-        #[arg(short = 'j', long, default_value = "4")]
-        parallel: u32,
         /// Force removal without confirmation
         #[arg(short, long)]
         force: bool,
@@ -93,8 +87,7 @@ impl Cli {
                 source,
                 destination,
                 recursive,
-                parallel,
-            } => cp::execute(source, destination, *recursive, *parallel).await,
+            } => cp::execute(source, destination, *recursive).await,
             Commands::Ls {
                 path,
                 long,
@@ -115,9 +108,8 @@ impl Cli {
                 source,
                 destination,
                 recursive,
-                parallel,
                 force,
-            } => mv::execute(source, destination, *recursive, *parallel, *force).await,
+            } => mv::execute(source, destination, *recursive, *force).await,
             Commands::Rm {
                 path,
                 recursive,

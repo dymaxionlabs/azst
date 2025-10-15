@@ -609,24 +609,12 @@ impl AzCopyClient {
 
     /// Copy files/directories using AzCopy
     /// Supports local->azure, azure->local, and azure->azure
-    pub async fn copy(
-        &self,
-        source: &str,
-        destination: &str,
-        recursive: bool,
-        max_connections: u32,
-    ) -> Result<()> {
+    pub async fn copy(&self, source: &str, destination: &str, recursive: bool) -> Result<()> {
         let mut cmd = AsyncCommand::new("azcopy");
         cmd.args(["copy", source, destination]);
 
         if recursive {
             cmd.arg("--recursive");
-        }
-
-        // Set number of concurrent connections
-        if max_connections > 0 {
-            cmd.args(["--block-size-mb", "8"]);
-            cmd.args(["--cap-mbps", "0"]); // No bandwidth cap by default
         }
 
         // Use JSON output for better parsing

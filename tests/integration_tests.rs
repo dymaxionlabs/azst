@@ -104,13 +104,6 @@ mod cp_command_tests {
     }
 
     #[test]
-    fn test_cp_parallel_flag() {
-        let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cp", "-j", "8", "--help"]);
-        cmd.assert().success();
-    }
-
-    #[test]
     fn test_cp_nonexistent_source() {
         let temp_dir = TempDir::new().unwrap();
         let dest_file = temp_dir.path().join("dest.txt");
@@ -327,6 +320,78 @@ mod rm_command_tests {
         cmd.assert()
             .failure()
             .stderr(predicate::str::contains("does not exist"));
+    }
+}
+
+#[cfg(test)]
+mod mv_command_tests {
+    use super::*;
+
+    #[test]
+    fn test_mv_help() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["mv", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("Move files"));
+    }
+
+    #[test]
+    fn test_mv_missing_args() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.arg("mv");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("required arguments"));
+    }
+
+    #[test]
+    fn test_mv_recursive_flag() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["mv", "-r", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("recursive"));
+    }
+
+    #[test]
+    fn test_mv_force_flag() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["mv", "-f", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("force"));
+    }
+
+    #[test]
+    fn test_mv_local_to_local_error() {
+        // mv should reject purely local operations
+        let temp_dir = TempDir::new().unwrap();
+        let source_file = temp_dir.path().join("source.txt");
+        let dest_file = temp_dir.path().join("dest.txt");
+
+        // Create source file
+        fs::write(&source_file, "test content").unwrap();
+
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&[
+            "mv",
+            source_file.to_str().unwrap(),
+            dest_file.to_str().unwrap(),
+        ]);
+
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Azure path"));
+    }
+
+    #[test]
+    fn test_mv_azure_uri_format_in_help() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["mv", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("az://"));
     }
 }
 

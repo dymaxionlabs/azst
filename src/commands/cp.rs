@@ -5,12 +5,7 @@ use tokio::fs;
 use crate::azure::{convert_az_uri_to_url, AzCopyClient};
 use crate::utils::{get_filename, get_parent_dir, is_azure_uri, is_directory, path_exists};
 
-pub async fn execute(
-    source: &str,
-    destination: &str,
-    recursive: bool,
-    parallel: u32,
-) -> Result<()> {
+pub async fn execute(source: &str, destination: &str, recursive: bool) -> Result<()> {
     let source_is_azure = is_azure_uri(source);
     let dest_is_azure = is_azure_uri(destination);
 
@@ -19,7 +14,7 @@ pub async fn execute(
             // Any Azure operation - use AzCopy for performance
             let azcopy = AzCopyClient::new();
             azcopy.check_prerequisites().await?;
-            copy_with_azcopy(source, destination, recursive, parallel).await
+            copy_with_azcopy(source, destination, recursive).await
         }
         (false, false) => {
             // Local to Local - use regular file copy
@@ -29,12 +24,7 @@ pub async fn execute(
 }
 
 /// Copy using AzCopy for high performance
-async fn copy_with_azcopy(
-    source: &str,
-    destination: &str,
-    recursive: bool,
-    parallel: u32,
-) -> Result<()> {
+async fn copy_with_azcopy(source: &str, destination: &str, recursive: bool) -> Result<()> {
     // Convert az:// URIs to HTTPS URLs for AzCopy
     let source_url = if is_azure_uri(source) {
         convert_az_uri_to_url(source)?
@@ -66,13 +56,13 @@ async fn copy_with_azcopy(
     };
 
     println!(
-        "{} {} {} to {} {}",
+        "{} {} {} to {}{}",
         "→".green(),
         operation_type,
         source.cyan(),
         destination.cyan(),
         if recursive {
-            format!("(recursive, {} parallel connections)", parallel).dimmed()
+            " (recursive)".dimmed()
         } else {
             "".dimmed()
         }
@@ -92,9 +82,7 @@ async fn copy_with_azcopy(
 
     // Use AzCopy for the operation
     let azcopy = AzCopyClient::new();
-    azcopy
-        .copy(&source_url, &dest_url, recursive, parallel)
-        .await?;
+    azcopy.copy(&source_url, &dest_url, recursive).await?;
 
     println!("{} Operation completed successfully", "✓".green());
     Ok(())

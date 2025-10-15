@@ -4,13 +4,7 @@ use colored::*;
 use crate::commands::{cp, rm};
 use crate::utils::is_azure_uri;
 
-pub async fn execute(
-    source: &str,
-    destination: &str,
-    recursive: bool,
-    parallel: u32,
-    force: bool,
-) -> Result<()> {
+pub async fn execute(source: &str, destination: &str, recursive: bool, force: bool) -> Result<()> {
     let source_is_azure = is_azure_uri(source);
     let dest_is_azure = is_azure_uri(destination);
 
@@ -31,7 +25,7 @@ pub async fn execute(
 
     // Step 1: Copy the source to destination
     println!("{} Step 1: Copying files...", "→".dimmed());
-    cp::execute(source, destination, recursive, parallel).await?;
+    cp::execute(source, destination, recursive).await?;
 
     // Step 2: Remove the source
     println!("{} Step 2: Removing source files...", "×".dimmed());
