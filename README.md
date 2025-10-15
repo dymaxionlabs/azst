@@ -75,9 +75,7 @@ export PATH="$PATH:~/.local/bin"  # Add to your ~/.bashrc or ~/.zshrc
 
 Download the `.zip` file, extract it, and add the directory to your PATH.
 
-**Note**: Manual installation requires AzCopy to be installed separately from
-[https://aka.ms/downloadazcopy](https://aka.ms/downloadazcopy), or you can run
-the installation script to automatically download AzCopy v10.30.1.
+**Note**: The installation script automatically downloads AzCopy v10.30.1 for Linux, macOS, and Windows (when run in Git Bash, WSL, or similar shell environments). For manual installation, AzCopy can be installed separately from [https://aka.ms/downloadazcopy](https://aka.ms/downloadazcopy).
 
 ### Build from Source
 

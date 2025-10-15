@@ -509,7 +509,17 @@ pub fn convert_az_uri_to_url(az_uri: &str) -> Result<String> {
 /// Get the path where bundled AzCopy should be installed
 pub fn get_bundled_azcopy_path() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
-    Ok(home.join(".local/share/azst/azcopy/azcopy"))
+    let azcopy_dir = home.join(".local/share/azst/azcopy");
+
+    // On Windows, use azcopy.exe, otherwise use azcopy
+    #[cfg(target_os = "windows")]
+    {
+        Ok(azcopy_dir.join("azcopy.exe"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(azcopy_dir.join("azcopy"))
+    }
 }
 
 /// Extract version from azcopy --version output

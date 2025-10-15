@@ -128,7 +128,12 @@ echo "Checking for AzCopy..."
 
 AZCOPY_VERSION="10.30.1"
 AZCOPY_DIR="$HOME/.local/share/azst/azcopy"
-AZCOPY_BINARY="$AZCOPY_DIR/azcopy"
+# Set appropriate binary name based on OS
+if [ "$OS_TYPE" = "windows" ]; then
+    AZCOPY_BINARY="$AZCOPY_DIR/azcopy.exe"
+else
+    AZCOPY_BINARY="$AZCOPY_DIR/azcopy"
+fi
 
 # Check if we already have the correct AzCopy version
 AZCOPY_NEEDS_INSTALL=true
@@ -175,8 +180,18 @@ if [ "$AZCOPY_NEEDS_INSTALL" = true ]; then
             esac
             ;;
         windows)
-            echo -e "${YELLOW}AzCopy installation not supported on Windows through this script. Please install AzCopy manually.${NC}"
-            AZCOPY_NEEDS_INSTALL=false
+            case "$ARCH_TYPE" in
+                x86_64)
+                    AZCOPY_URL="https://github.com/Azure/azure-storage-azcopy/releases/download/v${AZCOPY_VERSION}/azcopy_windows_amd64_${AZCOPY_VERSION}.zip"
+                    ;;
+                aarch64)
+                    AZCOPY_URL="https://github.com/Azure/azure-storage-azcopy/releases/download/v${AZCOPY_VERSION}/azcopy_windows_arm64_${AZCOPY_VERSION}.zip"
+                    ;;
+                *)
+                    echo -e "${YELLOW}Warning: Unsupported architecture $ARCH_TYPE for AzCopy. You may need to install AzCopy manually.${NC}"
+                    AZCOPY_NEEDS_INSTALL=false
+                    ;;
+            esac
             ;;
     esac
 
@@ -200,7 +215,12 @@ if [ "$AZCOPY_NEEDS_INSTALL" = true ]; then
             elif [[ "$AZCOPY_ARCHIVE_NAME" == *.zip ]]; then
                 unzip -q "$AZCOPY_ARCHIVE_NAME"
                 # Find the azcopy binary (it's usually in a subdirectory)
-                AZCOPY_EXTRACTED=$(find . -name "azcopy" -type f | head -n1)
+                # On Windows, look for azcopy.exe, otherwise look for azcopy
+                if [ "$OS_TYPE" = "windows" ]; then
+                    AZCOPY_EXTRACTED=$(find . -name "azcopy.exe" -type f | head -n1)
+                else
+                    AZCOPY_EXTRACTED=$(find . -name "azcopy" -type f | head -n1)
+                fi
             fi
 
             if [ -n "$AZCOPY_EXTRACTED" ] && [ -f "$AZCOPY_EXTRACTED" ]; then
