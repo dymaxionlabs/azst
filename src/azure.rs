@@ -118,8 +118,6 @@ impl AzCopyOptions {
 #[derive(Debug, Clone)]
 pub struct AzureConfig {
     pub storage_account: Option<String>,
-    #[allow(dead_code)]
-    pub subscription_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -166,9 +164,6 @@ pub struct ContainerInfo {
 pub struct ContainerProperties {
     #[serde(rename = "lastModified")]
     pub last_modified: String,
-    #[serde(rename = "publicAccess")]
-    #[allow(dead_code)]
-    pub public_access: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,9 +172,6 @@ pub struct StorageAccountInfo {
     pub location: String,
     #[serde(rename = "resourceGroup")]
     pub resource_group: String,
-    #[serde(rename = "creationTime")]
-    #[allow(dead_code)]
-    pub creation_time: String,
 }
 
 #[derive(Clone)]
@@ -192,7 +184,6 @@ impl AzureClient {
         Self {
             config: AzureConfig {
                 storage_account: None,
-                subscription_id: None,
             },
         }
     }
@@ -234,31 +225,6 @@ impl AzureClient {
         }
 
         Ok(())
-    }
-
-    /// Get the default storage account from Azure CLI config
-    #[allow(dead_code)]
-    pub async fn get_default_storage_account(&self) -> Result<Option<String>> {
-        let output = AsyncCommand::new("az")
-            .args(["configure", "--list-defaults"])
-            .output()
-            .await
-            .context("Failed to get Azure CLI defaults")?;
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            // Parse the output to find storage account
-            // This is a simplified parser - in reality you'd want more robust parsing
-            for line in stdout.lines() {
-                if line.contains("storage-account") {
-                    if let Some(account) = line.split_whitespace().nth(1) {
-                        return Ok(Some(account.to_string()));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
     }
 
     /// List storage accounts in the current resource group or subscription
@@ -489,299 +455,6 @@ impl AzureClient {
 
         Ok((blob_items, next_marker))
     }
-
-    /// Upload a file to Azure storage
-    #[allow(dead_code)]
-    pub async fn upload_file(
-        &self,
-        local_path: &str,
-        container: &str,
-        blob_name: &str,
-    ) -> Result<()> {
-        let mut cmd = AsyncCommand::new("az");
-        cmd.args([
-            "storage",
-            "blob",
-            "upload",
-            "--file",
-            local_path,
-            "--container-name",
-            container,
-            "--name",
-            blob_name,
-            "--overwrite",
-        ]);
-
-        if let Some(ref account) = self.config.storage_account {
-            cmd.args(["--account-name", account]);
-        }
-
-        let output = cmd
-            .output()
-            .await
-            .context("Failed to execute az storage blob upload")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-
-            // Parse common errors and provide user-friendly messages
-            if stderr.contains("Storage account") && stderr.contains("not found") {
-                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
-                return Err(anyhow!(
-                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
-                    account_name
-                ));
-            } else if stderr.contains("container") && stderr.contains("not found") {
-                return Err(anyhow!(
-                    "Container '{}' not found. Please create the container first or verify the name.",
-                    container
-                ));
-            } else if stderr.contains("resource name length is not within the permissible limits")
-                || stderr.contains("OutOfRangeInput")
-            {
-                return Err(anyhow!(
-                    "Invalid container name '{}'. Container names must be 3-63 characters long, lowercase letters, numbers, and hyphens only.",
-                    container
-                ));
-            } else if stderr.contains("The specified container does not exist") {
-                return Err(anyhow!(
-                    "Container '{}' does not exist. Please create the container first.",
-                    container
-                ));
-            } else if stderr.contains("does not have the required permissions") {
-                return Err(anyhow!(
-                    "Permission denied. You don't have the required permissions to upload to this storage account."
-                ));
-            } else if stderr.contains("AuthenticationFailed") {
-                return Err(anyhow!(
-                    "Authentication failed. Please verify your Azure credentials and permissions."
-                ));
-            }
-
-            // For other errors, provide a simplified message
-            return Err(anyhow!("Upload failed: {}", stderr.trim()));
-        }
-
-        Ok(())
-    }
-
-    /// Upload a directory to Azure storage using batch upload for better performance
-    #[allow(dead_code)]
-    pub async fn upload_batch(
-        &self,
-        local_dir: &str,
-        container: &str,
-        destination_path: Option<&str>,
-        max_connections: u32,
-    ) -> Result<()> {
-        let mut cmd = AsyncCommand::new("az");
-        cmd.args([
-            "storage",
-            "blob",
-            "upload-batch",
-            "--source",
-            local_dir,
-            "--destination",
-            container,
-            "--overwrite",
-            "--max-connections",
-            &max_connections.to_string(),
-        ]);
-
-        if let Some(dest_path) = destination_path {
-            cmd.args(["--destination-path", dest_path]);
-        }
-
-        if let Some(ref account) = self.config.storage_account {
-            cmd.args(["--account-name", account]);
-        }
-
-        let output = cmd
-            .output()
-            .await
-            .context("Failed to execute az storage blob upload-batch")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-
-            // Parse common errors and provide user-friendly messages
-            if stderr.contains("Storage account") && stderr.contains("not found") {
-                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
-                return Err(anyhow!(
-                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
-                    account_name
-                ));
-            } else if stderr.contains("container") && stderr.contains("not found") {
-                return Err(anyhow!(
-                    "Container '{}' not found. Please create the container first or verify the name.",
-                    container
-                ));
-            } else if stderr.contains("The specified container does not exist") {
-                return Err(anyhow!(
-                    "Container '{}' does not exist. Please create the container first.",
-                    container
-                ));
-            } else if stderr.contains("does not have the required permissions") {
-                return Err(anyhow!(
-                    "Permission denied. You don't have the required permissions to upload to this storage account."
-                ));
-            } else if stderr.contains("AuthenticationFailed") {
-                return Err(anyhow!(
-                    "Authentication failed. Please verify your Azure credentials and permissions."
-                ));
-            }
-
-            // For other errors, provide a simplified message
-            return Err(anyhow!("Batch upload failed: {}", stderr.trim()));
-        }
-
-        Ok(())
-    }
-
-    /// Download a file from Azure storage
-    #[allow(dead_code)]
-    pub async fn download_file(
-        &self,
-        container: &str,
-        blob_name: &str,
-        local_path: &str,
-    ) -> Result<()> {
-        let mut cmd = AsyncCommand::new("az");
-        cmd.args([
-            "storage",
-            "blob",
-            "download",
-            "--container-name",
-            container,
-            "--name",
-            blob_name,
-            "--file",
-            local_path,
-        ]);
-
-        if let Some(ref account) = self.config.storage_account {
-            cmd.args(["--account-name", account]);
-        }
-
-        let output = cmd
-            .output()
-            .await
-            .context("Failed to execute az storage blob download")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-
-            // Parse common errors and provide user-friendly messages
-            if stderr.contains("Storage account") && stderr.contains("not found") {
-                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
-                return Err(anyhow!(
-                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
-                    account_name
-                ));
-            } else if stderr.contains("container") && stderr.contains("not found") {
-                return Err(anyhow!(
-                    "Container '{}' not found. Please verify the container name.",
-                    container
-                ));
-            } else if stderr.contains("resource name length is not within the permissible limits")
-                || stderr.contains("OutOfRangeInput")
-            {
-                return Err(anyhow!(
-                    "Invalid container name '{}'. Container names must be 3-63 characters long, lowercase letters, numbers, and hyphens only.",
-                    container
-                ));
-            } else if stderr.contains("The specified container does not exist") {
-                return Err(anyhow!("Container '{}' does not exist.", container));
-            } else if stderr.contains("blob") && stderr.contains("not found") {
-                return Err(anyhow!(
-                    "Blob '{}' not found in container '{}'.",
-                    blob_name,
-                    container
-                ));
-            } else if stderr.contains("The specified blob does not exist") {
-                return Err(anyhow!(
-                    "Blob '{}' does not exist in container '{}'.",
-                    blob_name,
-                    container
-                ));
-            } else if stderr.contains("does not have the required permissions") {
-                return Err(anyhow!(
-                    "Permission denied. You don't have the required permissions to download from this storage account."
-                ));
-            } else if stderr.contains("AuthenticationFailed") {
-                return Err(anyhow!(
-                    "Authentication failed. Please verify your Azure credentials and permissions."
-                ));
-            }
-
-            return Err(anyhow!("Download failed: {}", stderr.trim()));
-        }
-
-        Ok(())
-    }
-
-    /// Delete a blob from Azure storage
-    #[allow(dead_code)]
-    pub async fn delete_blob(&self, container: &str, blob_name: &str) -> Result<()> {
-        let mut cmd = AsyncCommand::new("az");
-        cmd.args([
-            "storage",
-            "blob",
-            "delete",
-            "--container-name",
-            container,
-            "--name",
-            blob_name,
-        ]);
-
-        if let Some(ref account) = self.config.storage_account {
-            cmd.args(["--account-name", account]);
-        }
-
-        let output = cmd
-            .output()
-            .await
-            .context("Failed to execute az storage blob delete")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-
-            // Parse common errors and provide user-friendly messages
-            if stderr.contains("Storage account") && stderr.contains("not found") {
-                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
-                return Err(anyhow!(
-                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
-                    account_name
-                ));
-            } else if stderr.contains("container") && stderr.contains("not found") {
-                return Err(anyhow!(
-                    "Container '{}' not found. Please verify the container name.",
-                    container
-                ));
-            } else if stderr.contains("resource name length is not within the permissible limits")
-                || stderr.contains("OutOfRangeInput")
-            {
-                return Err(anyhow!(
-                    "Invalid container name '{}'. Container names must be 3-63 characters long, lowercase letters, numbers, and hyphens only.",
-                    container
-                ));
-            } else if stderr.contains("The specified container does not exist") {
-                return Err(anyhow!("Container '{}' does not exist.", container));
-            } else if stderr.contains("does not have the required permissions") {
-                return Err(anyhow!(
-                    "Permission denied. You don't have the required permissions to delete from this storage account."
-                ));
-            } else if stderr.contains("AuthenticationFailed") {
-                return Err(anyhow!(
-                    "Authentication failed. Please verify your Azure credentials and permissions."
-                ));
-            }
-
-            return Err(anyhow!("Delete failed: {}", stderr.trim()));
-        }
-
-        Ok(())
-    }
 }
 
 // ============================================================================
@@ -822,30 +495,11 @@ pub fn convert_az_uri_to_url(az_uri: &str) -> Result<String> {
 }
 
 #[derive(Clone)]
-pub struct AzCopyClient {
-    #[allow(dead_code)]
-    config: AzureConfig,
-}
+pub struct AzCopyClient {}
 
 impl AzCopyClient {
     pub fn new() -> Self {
-        Self {
-            config: AzureConfig {
-                storage_account: None,
-                subscription_id: None,
-            },
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn with_storage_account(mut self, account: &str) -> Self {
-        self.config.storage_account = Some(account.to_string());
-        self
-    }
-
-    #[allow(dead_code)]
-    pub fn get_storage_account(&self) -> Option<&str> {
-        self.config.storage_account.as_deref()
+        Self {}
     }
 
     /// Check if AzCopy is installed and Azure CLI is authenticated
@@ -877,14 +531,6 @@ impl AzCopyClient {
         }
 
         Ok(())
-    }
-
-    /// Copy files/directories using AzCopy
-    /// Supports local->azure, azure->local, and azure->azure
-    #[allow(dead_code)]
-    pub async fn copy(&self, source: &str, destination: &str, recursive: bool) -> Result<()> {
-        let options = AzCopyOptions::new().with_recursive(recursive);
-        self.copy_with_options(source, destination, &options).await
     }
 
     /// Copy files/directories using AzCopy with additional options
@@ -941,19 +587,6 @@ impl AzCopyClient {
         }
 
         Ok(())
-    }
-
-    /// Sync directories using AzCopy (rsync-like functionality)
-    #[allow(dead_code)]
-    pub async fn sync(
-        &self,
-        source: &str,
-        destination: &str,
-        delete_destination: bool,
-    ) -> Result<()> {
-        let options = AzCopyOptions::new();
-        self.sync_with_options(source, destination, delete_destination, &options)
-            .await
     }
 
     /// Sync directories using AzCopy with additional options
@@ -1021,13 +654,6 @@ impl AzCopyClient {
         Ok(())
     }
 
-    /// Remove files/directories using AzCopy
-    #[allow(dead_code)]
-    pub async fn remove(&self, target: &str, recursive: bool) -> Result<()> {
-        let options = AzCopyOptions::new().with_recursive(recursive);
-        self.remove_with_options(target, &options).await
-    }
-
     /// Remove files/directories using AzCopy with additional options
     pub async fn remove_with_options(&self, target: &str, options: &AzCopyOptions) -> Result<()> {
         let mut cmd = AsyncCommand::new("azcopy");
@@ -1081,38 +707,6 @@ impl AzCopyClient {
 
         Ok(())
     }
-
-    /// Parse AzCopy errors and provide user-friendly messages
-    #[allow(dead_code)]
-    fn parse_azcopy_error(&self, stderr: &str) -> anyhow::Error {
-        if stderr.contains("authentication") || stderr.contains("AuthenticationFailed") {
-            anyhow!(
-                "Authentication failed. Please verify your Azure credentials by running 'az login'."
-            )
-        } else if stderr.contains("AuthorizationPermissionMismatch") {
-            anyhow!(
-                "Permission denied. Your Azure account doesn't have permission to write to this storage account.\n\
-                \n\
-                To fix this, you need one of these roles assigned:\n\
-                  - Storage Blob Data Contributor\n\
-                  - Storage Blob Data Owner\n\
-                \n\
-                Ask your Azure administrator to grant these permissions, or use:\n\
-                  az role assignment create --role \"Storage Blob Data Contributor\" \\\n\
-                    --assignee <your-email> \\\n\
-                    --scope /subscriptions/<subscription-id>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<account>"
-            )
-        } else if stderr.contains("BlobNotFound") || stderr.contains("not found") {
-            anyhow!("Resource not found. Please verify the path and container name.")
-        } else if stderr.contains("ContainerNotFound") {
-            anyhow!("Container not found. Please create the container first or verify the name.")
-        } else if stderr.contains("AccountNotFound") {
-            anyhow!("Storage account not found. Please verify the account name and ensure you have access to it.")
-        } else {
-            // Return the actual error for debugging
-            anyhow!("AzCopy operation failed: {}", stderr.trim())
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1123,7 +717,6 @@ mod tests {
     fn test_azure_client_new() {
         let client = AzureClient::new();
         assert!(client.config.storage_account.is_none());
-        assert!(client.config.subscription_id.is_none());
     }
 
     #[test]
@@ -1257,7 +850,6 @@ mod tests {
         assert_eq!(account.name, "mystorageaccount");
         assert_eq!(account.location, "eastus2");
         assert_eq!(account.resource_group, "my-resource-group");
-        assert_eq!(account.creation_time, "2024-01-01T00:00:00.000000+00:00");
     }
 
     #[test]

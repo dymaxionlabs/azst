@@ -134,15 +134,6 @@ pub fn get_parent_dir(path: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Normalize a path by removing trailing slashes (except for root)
-#[allow(dead_code)]
-pub fn normalize_path(path: &str) -> String {
-    if path == "/" {
-        return path.to_string();
-    }
-    path.trim_end_matches('/').to_string()
-}
-
 /// Check if a path contains wildcard characters (*, ?, [, ])
 pub fn contains_wildcard(path: &str) -> bool {
     path.contains('*') || path.contains('?') || path.contains('[')
@@ -309,15 +300,6 @@ mod tests {
         );
         assert_eq!(get_parent_dir("/path/to/"), Some("/path".to_string()));
         assert_eq!(get_parent_dir("file.txt"), Some("".to_string()));
-        assert_eq!(get_parent_dir("/"), None);
-    }
-
-    #[test]
-    fn test_normalize_path() {
-        assert_eq!(normalize_path("/path/to/file/"), "/path/to/file");
-        assert_eq!(normalize_path("/path/to/file"), "/path/to/file");
-        assert_eq!(normalize_path("/"), "/");
-        assert_eq!(normalize_path("//"), ""); // Multiple slashes trimmed
     }
 
     #[test]

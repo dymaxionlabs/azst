@@ -80,11 +80,9 @@ pub struct InitMessage {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub enum AzCopyOperation {
     Copy,
     Remove,
-    Sync,
 }
 
 /// Parse and display AzCopy JSON output with a progress bar
@@ -109,7 +107,6 @@ pub async fn handle_azcopy_output_with_operation<R: AsyncRead + Unpin>(
     let verb_past = match operation {
         AzCopyOperation::Copy => "transferred",
         AzCopyOperation::Remove => "removed",
-        AzCopyOperation::Sync => "synced",
     };
 
     while let Some(line) = lines.next_line().await? {
