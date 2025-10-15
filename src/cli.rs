@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::{cp, du, ls, mv, rm, sync};
+use crate::commands::{cat, cp, du, ls, mv, rm, sync};
 
 #[derive(Parser)]
 #[command(name = "azst")]
@@ -14,6 +14,17 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Concatenate object content to stdout (like gsutil cat)
+    Cat {
+        /// URLs to read (az://container/path)
+        urls: Vec<String>,
+        /// Print short header for each object
+        #[arg(long)]
+        header: bool,
+        /// Output just the specified byte range (e.g., '256-5939', '256-', or '-5')
+        #[arg(short, long)]
+        range: Option<String>,
+    },
     /// Copy files to/from Azure storage (like gsutil cp)
     Cp {
         /// Source path (local file or az://container/path)
@@ -145,6 +156,11 @@ pub enum Commands {
 impl Cli {
     pub async fn run(&self) -> Result<()> {
         match &self.command {
+            Commands::Cat {
+                urls,
+                header,
+                range,
+            } => cat::execute(urls, *header, range.as_deref()).await,
             Commands::Cp {
                 source,
                 destination,

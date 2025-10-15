@@ -10,6 +10,7 @@ backend for blazing-fast transfers while providing a clean, intuitive interface.
 ## Features
 
 - **🚀 High Performance** - Uses AzCopy backend for maximum transfer speeds
+- **cat** - Concatenate object content to stdout (including byte range support)
 - **cp** - Copy files to/from/between Azure storage (including Azure-to-Azure
   server-side copies)
 - **ls** - List objects in Azure storage with detailed information
@@ -129,6 +130,44 @@ azst du -H az://myaccount/mycontainer/prefix/
 # Show only total size (summarize)
 azst du -s az://myaccount/mycontainer/
 ```
+
+### Concatenate (cat)
+
+The `cat` command outputs the contents of one or more Azure blobs to stdout,
+similar to `gsutil cat`:
+
+```bash
+# Output blob contents to stdout
+azst cat az://myaccount/mycontainer/file.txt
+
+# Output multiple blobs
+azst cat az://myaccount/mycontainer/file1.txt az://myaccount/mycontainer/file2.txt
+
+# Print header for each blob
+azst cat --header az://myaccount/mycontainer/*.txt
+
+# Output specific byte range (start-end)
+azst cat -r 0-1023 az://myaccount/mycontainer/file.bin
+
+# Output from byte 1024 to end
+azst cat -r 1024- az://myaccount/mycontainer/file.bin
+
+# Redirect to file
+azst cat az://myaccount/mycontainer/file.txt > local_file.txt
+
+# Pipe to other commands
+azst cat az://myaccount/mycontainer/data.csv | head -10
+```
+
+**Options:**
+- `--header`: Print short header for each object
+- `-r, --range <RANGE>`: Output just the specified byte range
+  - Format: `start-end` (e.g., `256-5939`)
+  - Format: `start-` (e.g., `256-` for all bytes from 256 onwards)
+
+**Note:** The `cat` command does not compute a checksum of the downloaded data.
+For data integrity verification, use `azst cp` which performs automatic checksum
+validation.
 
 ### Disk Usage (du)
 

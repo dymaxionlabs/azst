@@ -49,6 +49,56 @@ mod cli_parsing_tests {
 }
 
 #[cfg(test)]
+mod cat_command_tests {
+    use super::*;
+
+    #[test]
+    fn test_cat_help() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["cat", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("Concatenate object content"));
+    }
+
+    #[test]
+    fn test_cat_missing_args() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.arg("cat");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("No URLs provided"));
+    }
+
+    #[test]
+    fn test_cat_invalid_url() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["cat", "invalid-url"]);
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid URL"));
+    }
+
+    #[test]
+    fn test_cat_header_flag() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["cat", "--header", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("header"));
+    }
+
+    #[test]
+    fn test_cat_range_flag() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["cat", "--range", "0-100", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("range"));
+    }
+}
+
+#[cfg(test)]
 mod cp_command_tests {
     use super::*;
 
