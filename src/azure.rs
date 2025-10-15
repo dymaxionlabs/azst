@@ -2,6 +2,78 @@ use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use tokio::process::Command as AsyncCommand;
 
+// ============================================================================
+// AzCopy Options - Common options for azcopy operations
+// ============================================================================
+
+/// Options for azcopy copy operations
+#[derive(Debug, Clone, Default)]
+pub struct AzCopyOptions {
+    pub recursive: bool,
+    pub dry_run: bool,
+    pub cap_mbps: Option<f64>,
+    pub include_pattern: Option<String>,
+    pub exclude_pattern: Option<String>,
+}
+
+impl AzCopyOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_recursive(mut self, recursive: bool) -> Self {
+        self.recursive = recursive;
+        self
+    }
+
+    pub fn with_dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
+        self
+    }
+
+    pub fn with_cap_mbps(mut self, cap_mbps: Option<f64>) -> Self {
+        self.cap_mbps = cap_mbps;
+        self
+    }
+
+    pub fn with_include_pattern(mut self, pattern: Option<String>) -> Self {
+        self.include_pattern = pattern;
+        self
+    }
+
+    pub fn with_exclude_pattern(mut self, pattern: Option<String>) -> Self {
+        self.exclude_pattern = pattern;
+        self
+    }
+
+    /// Apply common options to a command
+    pub fn apply_to_command(&self, cmd: &mut AsyncCommand) {
+        if self.recursive {
+            cmd.arg("--recursive");
+        }
+
+        if self.dry_run {
+            cmd.arg("--dry-run");
+        }
+
+        if let Some(mbps) = self.cap_mbps {
+            cmd.arg(format!("--cap-mbps={}", mbps));
+        }
+
+        if let Some(pattern) = &self.include_pattern {
+            cmd.arg(format!("--include-pattern={}", pattern));
+        }
+
+        if let Some(pattern) = &self.exclude_pattern {
+            cmd.arg(format!("--exclude-pattern={}", pattern));
+        }
+    }
+}
+
+// ============================================================================
+// Azure Configuration and Data Structures
+// ============================================================================
+
 #[derive(Debug, Clone)]
 pub struct AzureConfig {
     pub storage_account: Option<String>,
@@ -609,13 +681,24 @@ impl AzCopyClient {
 
     /// Copy files/directories using AzCopy
     /// Supports local->azure, azure->local, and azure->azure
+    #[allow(dead_code)]
     pub async fn copy(&self, source: &str, destination: &str, recursive: bool) -> Result<()> {
+        let options = AzCopyOptions::new().with_recursive(recursive);
+        self.copy_with_options(source, destination, &options).await
+    }
+
+    /// Copy files/directories using AzCopy with additional options
+    pub async fn copy_with_options(
+        &self,
+        source: &str,
+        destination: &str,
+        options: &AzCopyOptions,
+    ) -> Result<()> {
         let mut cmd = AsyncCommand::new("azcopy");
         cmd.args(["copy", source, destination]);
 
-        if recursive {
-            cmd.arg("--recursive");
-        }
+        // Apply common options
+        options.apply_to_command(&mut cmd);
 
         // Use JSON output for better parsing
         cmd.args(["--output-type", "json"]);
@@ -658,17 +741,48 @@ impl AzCopyClient {
     }
 
     /// Sync directories using AzCopy (rsync-like functionality)
+    #[allow(dead_code)]
     pub async fn sync(
         &self,
         source: &str,
         destination: &str,
         delete_destination: bool,
     ) -> Result<()> {
+        let options = AzCopyOptions::new();
+        self.sync_with_options(source, destination, delete_destination, &options)
+            .await
+    }
+
+    /// Sync directories using AzCopy with additional options
+    pub async fn sync_with_options(
+        &self,
+        source: &str,
+        destination: &str,
+        delete_destination: bool,
+        options: &AzCopyOptions,
+    ) -> Result<()> {
         let mut cmd = AsyncCommand::new("azcopy");
         cmd.args(["sync", source, destination]);
 
         if delete_destination {
             cmd.arg("--delete-destination=true");
+        }
+
+        // Apply common options (excluding recursive as sync is always recursive)
+        if options.dry_run {
+            cmd.arg("--dry-run");
+        }
+
+        if let Some(mbps) = options.cap_mbps {
+            cmd.arg(format!("--cap-mbps={}", mbps));
+        }
+
+        if let Some(pattern) = &options.include_pattern {
+            cmd.arg(format!("--include-pattern={}", pattern));
+        }
+
+        if let Some(pattern) = &options.exclude_pattern {
+            cmd.arg(format!("--exclude-pattern={}", pattern));
         }
 
         // Use Azure CLI credentials
@@ -694,13 +808,19 @@ impl AzCopyClient {
     }
 
     /// Remove files/directories using AzCopy
+    #[allow(dead_code)]
     pub async fn remove(&self, target: &str, recursive: bool) -> Result<()> {
+        let options = AzCopyOptions::new().with_recursive(recursive);
+        self.remove_with_options(target, &options).await
+    }
+
+    /// Remove files/directories using AzCopy with additional options
+    pub async fn remove_with_options(&self, target: &str, options: &AzCopyOptions) -> Result<()> {
         let mut cmd = AsyncCommand::new("azcopy");
         cmd.args(["remove", target]);
 
-        if recursive {
-            cmd.arg("--recursive");
-        }
+        // Apply common options
+        options.apply_to_command(&mut cmd);
 
         // Use JSON output for better parsing
         cmd.args(["--output-type", "json"]);

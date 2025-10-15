@@ -25,11 +25,11 @@ pub async fn execute(source: &str, destination: &str, recursive: bool, force: bo
 
     // Step 1: Copy the source to destination
     println!("{} Step 1: Copying files...", "→".dimmed());
-    cp::execute(source, destination, recursive).await?;
+    cp::execute(source, destination, recursive, false, None, None, None).await?;
 
     // Step 2: Remove the source
     println!("{} Step 2: Removing source files...", "×".dimmed());
-    rm::execute(source, recursive, force).await?;
+    rm::execute(source, recursive, force, false, None, None).await?;
 
     println!("{} Move operation completed successfully", "✓".green());
     Ok(())

@@ -2,10 +2,18 @@ use anyhow::{anyhow, Result};
 use colored::*;
 use tokio::fs;
 
-use crate::azure::{convert_az_uri_to_url, AzCopyClient};
+use crate::azure::{convert_az_uri_to_url, AzCopyClient, AzCopyOptions};
 use crate::utils::{get_filename, get_parent_dir, is_azure_uri, is_directory, path_exists};
 
-pub async fn execute(source: &str, destination: &str, recursive: bool) -> Result<()> {
+pub async fn execute(
+    source: &str,
+    destination: &str,
+    recursive: bool,
+    dry_run: bool,
+    cap_mbps: Option<f64>,
+    include_pattern: Option<&str>,
+    exclude_pattern: Option<&str>,
+) -> Result<()> {
     let source_is_azure = is_azure_uri(source);
     let dest_is_azure = is_azure_uri(destination);
 
@@ -14,7 +22,16 @@ pub async fn execute(source: &str, destination: &str, recursive: bool) -> Result
             // Any Azure operation - use AzCopy for performance
             let azcopy = AzCopyClient::new();
             azcopy.check_prerequisites().await?;
-            copy_with_azcopy(source, destination, recursive).await
+            copy_with_azcopy(
+                source,
+                destination,
+                recursive,
+                dry_run,
+                cap_mbps,
+                include_pattern,
+                exclude_pattern,
+            )
+            .await
         }
         (false, false) => {
             // Local to Local - use regular file copy
@@ -24,7 +41,15 @@ pub async fn execute(source: &str, destination: &str, recursive: bool) -> Result
 }
 
 /// Copy using AzCopy for high performance
-async fn copy_with_azcopy(source: &str, destination: &str, recursive: bool) -> Result<()> {
+async fn copy_with_azcopy(
+    source: &str,
+    destination: &str,
+    recursive: bool,
+    dry_run: bool,
+    cap_mbps: Option<f64>,
+    include_pattern: Option<&str>,
+    exclude_pattern: Option<&str>,
+) -> Result<()> {
     // Convert az:// URIs to HTTPS URLs for AzCopy
     let source_url = if is_azure_uri(source) {
         convert_az_uri_to_url(source)?
@@ -55,34 +80,74 @@ async fn copy_with_azcopy(source: &str, destination: &str, recursive: bool) -> R
         _ => "Copying",
     };
 
+    let mut flags_display = Vec::new();
+    if recursive {
+        flags_display.push("recursive");
+    }
+    if dry_run {
+        flags_display.push("dry-run");
+    }
+    if cap_mbps.is_some() {
+        flags_display.push("rate-limited");
+    }
+    if include_pattern.is_some() {
+        flags_display.push("filtered");
+    }
+
+    let flags_str = if !flags_display.is_empty() {
+        format!(" ({})", flags_display.join(", "))
+    } else {
+        String::new()
+    };
+
     println!(
         "{} {} {} to {}{}",
         "→".green(),
         operation_type,
         source.cyan(),
         destination.cyan(),
-        if recursive {
-            " (recursive)".dimmed()
-        } else {
-            "".dimmed()
-        }
+        flags_str.dimmed()
     );
 
+    // Build options
+    let mut options = AzCopyOptions::new()
+        .with_recursive(recursive)
+        .with_dry_run(dry_run)
+        .with_cap_mbps(cap_mbps);
+
+    if let Some(pattern) = include_pattern {
+        options = options.with_include_pattern(Some(pattern.to_string()));
+    }
+    if let Some(pattern) = exclude_pattern {
+        options = options.with_exclude_pattern(Some(pattern.to_string()));
+    }
+
     // Show the actual AzCopy command for debugging
-    let recursive_flag = if recursive { " --recursive" } else { "" };
-    println!(
-        "{} {}",
-        "⚙".dimmed(),
-        format!(
-            "azcopy copy '{}' '{}'{} --output-type json",
-            source_url, dest_url, recursive_flag
-        )
-        .dimmed()
-    );
+    let mut cmd_parts = vec![format!("azcopy copy '{}' '{}'", source_url, dest_url)];
+    if recursive {
+        cmd_parts.push("--recursive".to_string());
+    }
+    if dry_run {
+        cmd_parts.push("--dry-run".to_string());
+    }
+    if let Some(mbps) = cap_mbps {
+        cmd_parts.push(format!("--cap-mbps={}", mbps));
+    }
+    if let Some(pattern) = include_pattern {
+        cmd_parts.push(format!("--include-pattern='{}'", pattern));
+    }
+    if let Some(pattern) = exclude_pattern {
+        cmd_parts.push(format!("--exclude-pattern='{}'", pattern));
+    }
+    cmd_parts.push("--output-type json".to_string());
+
+    println!("{} {}", "⚙".dimmed(), cmd_parts.join(" ").dimmed());
 
     // Use AzCopy for the operation
     let azcopy = AzCopyClient::new();
-    azcopy.copy(&source_url, &dest_url, recursive).await?;
+    azcopy
+        .copy_with_options(&source_url, &dest_url, &options)
+        .await?;
 
     println!("{} Operation completed successfully", "✓".green());
     Ok(())

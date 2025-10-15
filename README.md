@@ -134,6 +134,21 @@ azst rm -rf az://myaccount/mycontainer/prefix/
 
 # List with human-readable sizes
 azst ls -lh az://myaccount/mycontainer/
+
+# Preview operations without executing (dry-run)
+azst cp -r --dry-run /local/dir/ az://myaccount/mycontainer/
+azst rm -r --dry-run az://myaccount/mycontainer/old-files/
+
+# Limit bandwidth usage (in megabits per second)
+azst cp -r --cap-mbps 100 /large/dataset/ az://myaccount/mycontainer/
+
+# Filter files by pattern (supports wildcards)
+azst cp -r --include-pattern "*.jpg;*.png" /photos/ az://myaccount/photos/
+azst rm -r --exclude-pattern "*.log;*.tmp" az://myaccount/mycontainer/
+
+# Combine filtering options
+azst sync --include-pattern "*.txt" --exclude-pattern "*temp*" \
+  /local/docs/ az://myaccount/documents/
 ```
 
 ### Performance Notes
@@ -177,6 +192,78 @@ compatibility:
 
 **Note:** The `az://` URI scheme is not used by Microsoft Azure services, so
 there are no conflicts with official tools.
+
+## Advanced Options
+
+### Dry Run
+
+Preview what operations would be performed without actually executing them:
+
+```bash
+# Preview file copies
+azst cp -r --dry-run /local/data/ az://myaccount/backup/
+
+# Preview file removals
+azst rm -r --dry-run az://myaccount/old-container/
+
+# Preview sync operations
+azst sync --dry-run /local/website/ az://myaccount/www/
+```
+
+### Bandwidth Control
+
+Limit transfer rates to prevent saturating your network connection:
+
+```bash
+# Limit to 100 Mbps
+azst cp -r --cap-mbps 100 /large/files/ az://myaccount/container/
+
+# Useful for background uploads that shouldn't affect other network usage
+azst sync --cap-mbps 50 /backups/ az://myaccount/backup-container/
+```
+
+### Pattern Filtering
+
+Filter files using wildcards during copy, sync, or remove operations:
+
+```bash
+# Copy only image files
+azst cp -r --include-pattern "*.jpg;*.png;*.gif" /photos/ az://myaccount/images/
+
+# Remove everything except important files
+azst rm -r --exclude-pattern "*.db;*.config" az://myaccount/temp-data/
+
+# Sync only text files, excluding temporary ones
+azst sync --include-pattern "*.txt;*.md" --exclude-pattern "*~;*.tmp" \
+  /documents/ az://myaccount/docs/
+```
+
+**Pattern syntax:**
+- Use wildcards: `*` (matches any characters) and `?` (matches single character)
+- Separate multiple patterns with semicolons: `*.jpg;*.png;*.gif`
+- Patterns are matched against the relative path of files
+
+### Environment Variables
+
+You can tune AzCopy's behavior using environment variables:
+
+```bash
+# Control parallel transfers (default: auto-calculated)
+export AZCOPY_CONCURRENCY_VALUE=16
+export AZCOPY_CONCURRENT_FILES=100
+
+# Control memory buffer size (in GB)
+export AZCOPY_BUFFER_GB=2
+
+# Customize log locations
+export AZCOPY_LOG_LOCATION=/tmp/azcopy-logs
+export AZCOPY_JOB_PLAN_LOCATION=/tmp/azcopy-plans
+
+# Run azst commands with custom settings
+azst cp -r /large/dataset/ az://myaccount/data/
+```
+
+See `azcopy env` for a complete list of environment variables.
 
 ## Configuration
 

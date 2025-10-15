@@ -23,6 +23,18 @@ pub enum Commands {
         /// Recursive copy for directories
         #[arg(short, long)]
         recursive: bool,
+        /// Preview what would be copied without actually copying
+        #[arg(long)]
+        dry_run: bool,
+        /// Limit transfer rate in megabits per second
+        #[arg(long)]
+        cap_mbps: Option<f64>,
+        /// Include only files matching this pattern (supports wildcards like *.jpg;*.pdf)
+        #[arg(long)]
+        include_pattern: Option<String>,
+        /// Exclude files matching this pattern (supports wildcards like *.log;*.tmp)
+        #[arg(long)]
+        exclude_pattern: Option<String>,
     },
     /// List objects in Azure storage (like gsutil ls)
     Ls {
@@ -64,6 +76,15 @@ pub enum Commands {
         /// Force removal without confirmation
         #[arg(short, long)]
         force: bool,
+        /// Preview what would be removed without actually removing
+        #[arg(long)]
+        dry_run: bool,
+        /// Include only files matching this pattern (supports wildcards like *.jpg;*.pdf)
+        #[arg(long)]
+        include_pattern: Option<String>,
+        /// Exclude files matching this pattern (supports wildcards like *.log;*.tmp)
+        #[arg(long)]
+        exclude_pattern: Option<String>,
     },
     /// Sync directories to/from Azure storage (like rsync)
     Sync {
@@ -77,6 +98,18 @@ pub enum Commands {
         /// Skip confirmation prompt for delete operations
         #[arg(short, long)]
         force: bool,
+        /// Preview what would be synced without actually syncing
+        #[arg(long)]
+        dry_run: bool,
+        /// Limit transfer rate in megabits per second
+        #[arg(long)]
+        cap_mbps: Option<f64>,
+        /// Include only files matching this pattern (supports wildcards like *.jpg;*.pdf)
+        #[arg(long)]
+        include_pattern: Option<String>,
+        /// Exclude files matching this pattern (supports wildcards like *.log;*.tmp)
+        #[arg(long)]
+        exclude_pattern: Option<String>,
     },
 }
 
@@ -87,7 +120,22 @@ impl Cli {
                 source,
                 destination,
                 recursive,
-            } => cp::execute(source, destination, *recursive).await,
+                dry_run,
+                cap_mbps,
+                include_pattern,
+                exclude_pattern,
+            } => {
+                cp::execute(
+                    source,
+                    destination,
+                    *recursive,
+                    *dry_run,
+                    *cap_mbps,
+                    include_pattern.as_deref(),
+                    exclude_pattern.as_deref(),
+                )
+                .await
+            }
             Commands::Ls {
                 path,
                 long,
@@ -114,13 +162,42 @@ impl Cli {
                 path,
                 recursive,
                 force,
-            } => rm::execute(path, *recursive, *force).await,
+                dry_run,
+                include_pattern,
+                exclude_pattern,
+            } => {
+                rm::execute(
+                    path,
+                    *recursive,
+                    *force,
+                    *dry_run,
+                    include_pattern.as_deref(),
+                    exclude_pattern.as_deref(),
+                )
+                .await
+            }
             Commands::Sync {
                 source,
                 destination,
                 delete,
                 force,
-            } => sync::execute(source, destination, *delete, *force).await,
+                dry_run,
+                cap_mbps,
+                include_pattern,
+                exclude_pattern,
+            } => {
+                sync::execute(
+                    source,
+                    destination,
+                    *delete,
+                    *force,
+                    *dry_run,
+                    *cap_mbps,
+                    include_pattern.as_deref(),
+                    exclude_pattern.as_deref(),
+                )
+                .await
+            }
         }
     }
 }

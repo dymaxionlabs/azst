@@ -2,20 +2,42 @@ use anyhow::{anyhow, Result};
 use colored::*;
 use std::io::{self, Write};
 
-use crate::azure::{convert_az_uri_to_url, AzCopyClient};
+use crate::azure::{convert_az_uri_to_url, AzCopyClient, AzCopyOptions};
 use crate::utils::{is_azure_uri, parse_azure_uri};
 
-pub async fn execute(path: &str, recursive: bool, force: bool) -> Result<()> {
+pub async fn execute(
+    path: &str,
+    recursive: bool,
+    force: bool,
+    dry_run: bool,
+    include_pattern: Option<&str>,
+    exclude_pattern: Option<&str>,
+) -> Result<()> {
     if is_azure_uri(path) {
         let azcopy = AzCopyClient::new();
         azcopy.check_prerequisites().await?;
-        remove_azure_object(path, recursive, force).await
+        remove_azure_object(
+            path,
+            recursive,
+            force,
+            dry_run,
+            include_pattern,
+            exclude_pattern,
+        )
+        .await
     } else {
         remove_local_path(path, recursive, force).await
     }
 }
 
-async fn remove_azure_object(path: &str, recursive: bool, force: bool) -> Result<()> {
+async fn remove_azure_object(
+    path: &str,
+    recursive: bool,
+    force: bool,
+    dry_run: bool,
+    include_pattern: Option<&str>,
+    exclude_pattern: Option<&str>,
+) -> Result<()> {
     let (_account, container, blob_path) = parse_azure_uri(path)?;
 
     // Validate that we have a container specified
@@ -58,29 +80,64 @@ async fn remove_azure_object(path: &str, recursive: bool, force: bool) -> Result
     // Convert az:// URI to HTTPS URL for AzCopy
     let target_url = convert_az_uri_to_url(path)?;
 
-    let op_type = if recursive {
-        "Removing (recursive)"
+    let mut flags_display = Vec::new();
+    if recursive {
+        flags_display.push("recursive");
+    }
+    if dry_run {
+        flags_display.push("dry-run");
+    }
+    if include_pattern.is_some() {
+        flags_display.push("filtered");
+    }
+
+    let flags_str = if !flags_display.is_empty() {
+        format!(" ({})", flags_display.join(", "))
     } else {
-        "Removing"
+        String::new()
     };
-    println!("{} {} {}", "×".red(), op_type, path.cyan());
+
+    println!(
+        "{} Removing {}{}",
+        "×".red(),
+        path.cyan(),
+        flags_str.dimmed()
+    );
+
+    // Build options
+    let mut options = AzCopyOptions::new()
+        .with_recursive(recursive)
+        .with_dry_run(dry_run);
+
+    if let Some(pattern) = include_pattern {
+        options = options.with_include_pattern(Some(pattern.to_string()));
+    }
+    if let Some(pattern) = exclude_pattern {
+        options = options.with_exclude_pattern(Some(pattern.to_string()));
+    }
 
     // Show the actual AzCopy command for debugging
-    let recursive_flag = if recursive { " --recursive" } else { "" };
-    println!(
-        "{} {}",
-        "⚙".dimmed(),
-        format!(
-            "azcopy remove '{}'{} --output-type json",
-            target_url, recursive_flag
-        )
-        .dimmed()
-    );
+    let mut cmd_parts = vec![format!("azcopy remove '{}'", target_url)];
+    if recursive {
+        cmd_parts.push("--recursive".to_string());
+    }
+    if dry_run {
+        cmd_parts.push("--dry-run".to_string());
+    }
+    if let Some(pattern) = include_pattern {
+        cmd_parts.push(format!("--include-pattern='{}'", pattern));
+    }
+    if let Some(pattern) = exclude_pattern {
+        cmd_parts.push(format!("--exclude-pattern='{}'", pattern));
+    }
+    cmd_parts.push("--output-type json".to_string());
+
+    println!("{} {}", "⚙".dimmed(), cmd_parts.join(" ").dimmed());
     println!(); // Blank line before AzCopy output
 
     // Use AzCopy for removal
     let azcopy = AzCopyClient::new();
-    azcopy.remove(&target_url, recursive).await?;
+    azcopy.remove_with_options(&target_url, &options).await?;
 
     Ok(())
 }
