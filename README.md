@@ -150,17 +150,17 @@ The tool uses the Azure CLI configuration and authentication:
 
 ## Comparison with gsutil
 
-| gsutil      | azst           | Description         |
-| ----------- | -------------- | ------------------- |
-| `gs://`     | `az://`        | URI scheme          |
-| `gsutil cp` | `azst cp`      | Copy files          |
-| `gsutil ls` | `azst ls`      | List objects        |
-| `gsutil rm` | `azst rm`      | Remove objects      |
-| `gsutil du` | `azst du`      | Disk usage stats    |
-| `gsutil -m` | `azst cp -j N` | Parallel operations |
+| gsutil         | azst        | Description      |
+| -------------- | ----------- | ---------------- |
+| `gs://`        | `az://`     | URI scheme       |
+| `gsutil cp`    | `azst cp`   | Copy files       |
+| `gsutil ls`    | `azst ls`   | List objects     |
+| `gsutil rm`    | `azst rm`   | Remove objects   |
+| `gsutil du`    | `azst du`   | Disk usage stats |
+| `gsutil rsync` | `azst sync` | Sync directories |
 
 The tool aims to provide familiar gsutil-like semantics for Azure Blob Storage
-operations.
+operations. All copy and sync operations use AzCopy for parallel transfers by default.
 
 ## Contributing
 
