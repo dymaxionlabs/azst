@@ -123,6 +123,98 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     fi
 fi
 
+# Download and install AzCopy
+echo "Checking for AzCopy..."
+
+AZCOPY_VERSION="10.30.1"
+AZCOPY_DIR="$HOME/.local/share/azst/azcopy"
+AZCOPY_BINARY="$AZCOPY_DIR/azcopy"
+
+# Check if we already have the correct AzCopy version
+AZCOPY_NEEDS_INSTALL=true
+if [ -x "$AZCOPY_BINARY" ]; then
+    CURRENT_VERSION=$("$AZCOPY_BINARY" --version 2>/dev/null | head -n1 | awk '{print $3}' || echo "")
+    if [ "$CURRENT_VERSION" = "$AZCOPY_VERSION" ]; then
+        echo "AzCopy $AZCOPY_VERSION already installed"
+        AZCOPY_NEEDS_INSTALL=false
+    fi
+fi
+
+# Install AzCopy if needed
+if [ "$AZCOPY_NEEDS_INSTALL" = true ]; then
+    echo "Installing AzCopy $AZCOPY_VERSION..."
+
+    # Determine AzCopy download URL based on OS and architecture
+    case "$OS_TYPE" in
+        linux)
+            case "$ARCH_TYPE" in
+                x86_64)
+                    AZCOPY_URL="https://github.com/Azure/azure-storage-azcopy/releases/download/v${AZCOPY_VERSION}/azcopy_linux_amd64_${AZCOPY_VERSION}.tar.gz"
+                    ;;
+                aarch64)
+                    AZCOPY_URL="https://github.com/Azure/azure-storage-azcopy/releases/download/v${AZCOPY_VERSION}/azcopy_linux_arm64_${AZCOPY_VERSION}.tar.gz"
+                    ;;
+                *)
+                    echo -e "${YELLOW}Warning: Unsupported architecture $ARCH_TYPE for AzCopy. You may need to install AzCopy manually.${NC}"
+                    AZCOPY_NEEDS_INSTALL=false
+                    ;;
+            esac
+            ;;
+        macos)
+            case "$ARCH_TYPE" in
+                x86_64)
+                    AZCOPY_URL="https://github.com/Azure/azure-storage-azcopy/releases/download/v${AZCOPY_VERSION}/azcopy_darwin_amd64_${AZCOPY_VERSION}.zip"
+                    ;;
+                aarch64)
+                    AZCOPY_URL="https://github.com/Azure/azure-storage-azcopy/releases/download/v${AZCOPY_VERSION}/azcopy_darwin_arm64_${AZCOPY_VERSION}.zip"
+                    ;;
+                *)
+                    echo -e "${YELLOW}Warning: Unsupported architecture $ARCH_TYPE for AzCopy. You may need to install AzCopy manually.${NC}"
+                    AZCOPY_NEEDS_INSTALL=false
+                    ;;
+            esac
+            ;;
+        windows)
+            echo -e "${YELLOW}AzCopy installation not supported on Windows through this script. Please install AzCopy manually.${NC}"
+            AZCOPY_NEEDS_INSTALL=false
+            ;;
+    esac
+
+    if [ "$AZCOPY_NEEDS_INSTALL" = true ] && [ -n "$AZCOPY_URL" ]; then
+        # Create AzCopy directory
+        mkdir -p "$AZCOPY_DIR"
+
+        # Download AzCopy
+        AZCOPY_ARCHIVE_NAME=$(basename "$AZCOPY_URL")
+        echo "Downloading AzCopy from: $AZCOPY_URL"
+
+        if ! curl -sSL "$AZCOPY_URL" -o "$TMP_DIR/$AZCOPY_ARCHIVE_NAME"; then
+            echo -e "${YELLOW}Warning: Failed to download AzCopy. You may need to install it manually from https://aka.ms/downloadazcopy${NC}"
+        else
+            # Extract AzCopy
+            cd "$TMP_DIR"
+            if [[ "$AZCOPY_ARCHIVE_NAME" == *.tar.gz ]]; then
+                tar xzf "$AZCOPY_ARCHIVE_NAME"
+                # Find the azcopy binary (it's usually in a subdirectory)
+                AZCOPY_EXTRACTED=$(find . -name "azcopy" -type f | head -n1)
+            elif [[ "$AZCOPY_ARCHIVE_NAME" == *.zip ]]; then
+                unzip -q "$AZCOPY_ARCHIVE_NAME"
+                # Find the azcopy binary (it's usually in a subdirectory)
+                AZCOPY_EXTRACTED=$(find . -name "azcopy" -type f | head -n1)
+            fi
+
+            if [ -n "$AZCOPY_EXTRACTED" ] && [ -f "$AZCOPY_EXTRACTED" ]; then
+                # Install the binary
+                cp "$AZCOPY_EXTRACTED" "$AZCOPY_BINARY"
+                chmod +x "$AZCOPY_BINARY"
+                echo -e "${GREEN}✓ AzCopy $AZCOPY_VERSION installed successfully${NC}"
+            else
+                echo -e "${YELLOW}Warning: Could not find azcopy binary in downloaded archive${NC}"
+            fi
+        fi
+    fi
+fi
+
 echo ""
 echo -e "${GREEN}✓ Installation complete!${NC}"
 echo ""

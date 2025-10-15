@@ -59,12 +59,12 @@ async fn execute_with_options(options: SyncOptions<'_>) -> Result<()> {
         ));
     }
 
-    let azcopy = AzCopyClient::new();
+    let mut azcopy = AzCopyClient::new();
     azcopy.check_prerequisites().await?;
-    sync_with_azcopy(options).await
+    sync_with_azcopy(&mut azcopy, options).await
 }
 
-async fn sync_with_azcopy(options: SyncOptions<'_>) -> Result<()> {
+async fn sync_with_azcopy(azcopy: &mut AzCopyClient, options: SyncOptions<'_>) -> Result<()> {
     let source = options.source;
     let destination = options.destination;
     let delete_destination = options.delete_destination;
@@ -210,7 +210,6 @@ async fn sync_with_azcopy(options: SyncOptions<'_>) -> Result<()> {
     println!(); // Blank line before AzCopy output
 
     // Use AzCopy for the sync operation
-    let azcopy = AzCopyClient::new();
     azcopy
         .sync_with_options(&source_url, &dest_url, delete_destination, &azcopy_options)
         .await?;

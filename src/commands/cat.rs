@@ -50,7 +50,7 @@ async fn execute_with_options(options: CatOptions<'_>) -> Result<()> {
 
         // Check AzCopy prerequisites (only once)
         if idx == 0 {
-            let azcopy = AzCopyClient::new();
+            let mut azcopy = AzCopyClient::new();
             azcopy.check_prerequisites().await?;
         }
 

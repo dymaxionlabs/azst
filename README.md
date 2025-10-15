@@ -33,9 +33,10 @@ While AzCopy is powerful, it requires verbose HTTPS URLs. **azst** provides:
 
 ## Prerequisites
 
-1. **AzCopy**: Install from [https://aka.ms/downloadazcopy](https://aka.ms/downloadazcopy)
-2. **Azure CLI**: Install from [https://docs.microsoft.com/en-us/cli/azure/install-azure-cli](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
-3. **Authentication**: Run `az login` to authenticate with Azure
+1. **Azure CLI**: Install from [https://docs.microsoft.com/en-us/cli/azure/install-azure-cli](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
+2. **Authentication**: Run `az login` to authenticate with Azure
+
+**Note**: AzCopy will be automatically downloaded and installed during the installation process.
 
 ## Installation
 
@@ -47,8 +48,9 @@ Install the latest build using curl:
 curl -sSL https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.sh | bash
 ```
 
-This will download and install the latest binary from the `main` branch for your
-system to `~/.local/bin/`.
+This will download and install:
+- The latest `azst` binary from the `main` branch for your system to `~/.local/bin/`
+- AzCopy version 10.30.1 to `~/.local/share/azst/azcopy/` (if not already present)
 
 ### Manual Installation
 
@@ -72,6 +74,10 @@ export PATH="$PATH:~/.local/bin"  # Add to your ~/.bashrc or ~/.zshrc
 #### Windows
 
 Download the `.zip` file, extract it, and add the directory to your PATH.
+
+**Note**: Manual installation requires AzCopy to be installed separately from
+[https://aka.ms/downloadazcopy](https://aka.ms/downloadazcopy), or you can run
+the installation script to automatically download AzCopy v10.30.1.
 
 ### Build from Source
 

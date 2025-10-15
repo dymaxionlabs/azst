@@ -1,6 +1,14 @@
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
+use std::path::PathBuf;
 use tokio::process::Command as AsyncCommand;
+
+// ============================================================================
+// AzCopy Configuration
+// ============================================================================
+
+/// The pinned version of AzCopy that azst is tested with
+pub const AZCOPY_PINNED_VERSION: &str = "10.30.1";
 
 // ============================================================================
 // AzCopy Options - Common options for azcopy operations
@@ -494,27 +502,108 @@ pub fn convert_az_uri_to_url(az_uri: &str) -> Result<String> {
     }
 }
 
+// ============================================================================
+// AzCopy Path Utilities
+// ============================================================================
+
+/// Get the path where bundled AzCopy should be installed
+pub fn get_bundled_azcopy_path() -> Result<PathBuf> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
+    Ok(home.join(".local/share/azst/azcopy/azcopy"))
+}
+
+/// Extract version from azcopy --version output
+/// Expected format: "azcopy version 10.21.2"
+fn parse_azcopy_version(version_output: &str) -> Option<String> {
+    version_output
+        .lines()
+        .next()?
+        .split_whitespace()
+        .nth(2)
+        .map(|v| v.to_string())
+}
+
+/// Check if the given AzCopy executable matches our pinned version
+async fn check_azcopy_version(azcopy_path: &str) -> Result<bool> {
+    let output = AsyncCommand::new(azcopy_path)
+        .arg("--version")
+        .output()
+        .await
+        .context("Failed to get AzCopy version")?;
+
+    if !output.status.success() {
+        return Ok(false);
+    }
+
+    let version_str = String::from_utf8_lossy(&output.stdout);
+    let version = parse_azcopy_version(&version_str);
+
+    Ok(version.as_deref() == Some(AZCOPY_PINNED_VERSION))
+}
+
+/// Determine which AzCopy executable to use (system or bundled)
+async fn determine_azcopy_executable() -> Result<String> {
+    // First, try system azcopy if it matches our pinned version
+    if let Ok(true) = check_azcopy_version("azcopy").await {
+        return Ok("azcopy".to_string());
+    }
+
+    // Then, try bundled azcopy
+    if let Ok(bundled_path) = get_bundled_azcopy_path() {
+        let bundled_str = bundled_path.to_string_lossy();
+        if bundled_path.exists() && check_azcopy_version(&bundled_str).await.unwrap_or(false) {
+            return Ok(bundled_str.to_string());
+        }
+    }
+
+    // If neither works, fall back to system azcopy (will fail in check_prerequisites)
+    Ok("azcopy".to_string())
+}
+
 #[derive(Clone)]
-pub struct AzCopyClient {}
+pub struct AzCopyClient {
+    azcopy_executable: Option<String>,
+}
 
 impl AzCopyClient {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            azcopy_executable: None,
+        }
+    }
+
+    /// Get the AzCopy executable path, determining it if not already cached
+    async fn get_azcopy_executable(&mut self) -> Result<&str> {
+        if self.azcopy_executable.is_none() {
+            self.azcopy_executable = Some(determine_azcopy_executable().await?);
+        }
+        Ok(self.azcopy_executable.as_ref().unwrap())
     }
 
     /// Check if AzCopy is installed and Azure CLI is authenticated
-    pub async fn check_prerequisites(&self) -> Result<()> {
-        // Check if azcopy is installed
-        let output = AsyncCommand::new("azcopy")
+    pub async fn check_prerequisites(&mut self) -> Result<()> {
+        // Determine which azcopy executable to use and test it
+        let azcopy_path = self.get_azcopy_executable().await?;
+
+        let output = AsyncCommand::new(azcopy_path)
             .arg("--version")
             .output()
             .await
             .context(
-                "AzCopy not found. Please install AzCopy from https://aka.ms/downloadazcopy",
+                "AzCopy not found. Run the installation script again to download AzCopy, or install it manually from https://aka.ms/downloadazcopy",
             )?;
 
         if !output.status.success() {
             return Err(anyhow!("AzCopy is not working properly"));
+        }
+
+        // Verify version if we're using system azcopy
+        if azcopy_path == "azcopy" {
+            let version_str = String::from_utf8_lossy(&output.stdout);
+            let version = parse_azcopy_version(&version_str);
+            if version.as_deref() != Some(AZCOPY_PINNED_VERSION) {
+                eprintln!("Warning: System AzCopy version {:?} doesn't match pinned version {}. Consider running the installation script to download the tested version.", version, AZCOPY_PINNED_VERSION);
+            }
         }
 
         // Check if user is logged in to Azure (azcopy uses Azure CLI credentials)
@@ -535,12 +624,13 @@ impl AzCopyClient {
 
     /// Copy files/directories using AzCopy with additional options
     pub async fn copy_with_options(
-        &self,
+        &mut self,
         source: &str,
         destination: &str,
         options: &AzCopyOptions,
     ) -> Result<()> {
-        let mut cmd = AsyncCommand::new("azcopy");
+        let azcopy_path = self.get_azcopy_executable().await?;
+        let mut cmd = AsyncCommand::new(azcopy_path);
         cmd.args(["copy", source, destination]);
 
         // Apply common options
@@ -591,13 +681,14 @@ impl AzCopyClient {
 
     /// Sync directories using AzCopy with additional options
     pub async fn sync_with_options(
-        &self,
+        &mut self,
         source: &str,
         destination: &str,
         delete_destination: bool,
         options: &AzCopyOptions,
     ) -> Result<()> {
-        let mut cmd = AsyncCommand::new("azcopy");
+        let azcopy_path = self.get_azcopy_executable().await?;
+        let mut cmd = AsyncCommand::new(azcopy_path);
         cmd.args(["sync", source, destination]);
 
         if delete_destination {
@@ -655,8 +746,13 @@ impl AzCopyClient {
     }
 
     /// Remove files/directories using AzCopy with additional options
-    pub async fn remove_with_options(&self, target: &str, options: &AzCopyOptions) -> Result<()> {
-        let mut cmd = AsyncCommand::new("azcopy");
+    pub async fn remove_with_options(
+        &mut self,
+        target: &str,
+        options: &AzCopyOptions,
+    ) -> Result<()> {
+        let azcopy_path = self.get_azcopy_executable().await?;
+        let mut cmd = AsyncCommand::new(azcopy_path);
         cmd.args(["remove", target]);
 
         // Apply common options

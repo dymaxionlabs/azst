@@ -52,9 +52,9 @@ async fn execute_with_options(options: CopyOptions<'_>) -> Result<()> {
     match (source_is_azure, dest_is_azure) {
         (false, true) | (true, false) | (true, true) => {
             // Any Azure operation - use AzCopy for performance
-            let azcopy = AzCopyClient::new();
+            let mut azcopy = AzCopyClient::new();
             azcopy.check_prerequisites().await?;
-            copy_with_azcopy(options).await
+            copy_with_azcopy(&mut azcopy, options).await
         }
         (false, false) => {
             // Local to Local - use regular file copy
@@ -64,7 +64,7 @@ async fn execute_with_options(options: CopyOptions<'_>) -> Result<()> {
 }
 
 /// Copy using AzCopy for high performance
-async fn copy_with_azcopy(options: CopyOptions<'_>) -> Result<()> {
+async fn copy_with_azcopy(azcopy: &mut AzCopyClient, options: CopyOptions<'_>) -> Result<()> {
     let source = options.source;
     let destination = options.destination;
     let recursive = options.recursive;
@@ -177,7 +177,6 @@ async fn copy_with_azcopy(options: CopyOptions<'_>) -> Result<()> {
     println!("{} {}", "⚙".dimmed(), cmd_parts.join(" ").dimmed());
 
     // Use AzCopy for the operation
-    let azcopy = AzCopyClient::new();
     azcopy
         .copy_with_options(&source_url, &dest_url, &azcopy_options)
         .await?;

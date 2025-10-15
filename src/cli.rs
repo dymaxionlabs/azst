@@ -72,7 +72,7 @@ pub enum Commands {
     },
     /// List objects in Azure storage (like gsutil ls)
     Ls {
-        /// Path to list (az://container/ or az://container/prefix)
+        /// Path to list (az://account/container/ or az://account/container/prefix)
         path: Option<String>,
         /// Show detailed information
         #[arg(short, long)]

@@ -14,9 +14,10 @@ pub async fn execute(
     exclude_pattern: Option<&str>,
 ) -> Result<()> {
     if is_azure_uri(path) {
-        let azcopy = AzCopyClient::new();
+        let mut azcopy = AzCopyClient::new();
         azcopy.check_prerequisites().await?;
         remove_azure_object(
+            &mut azcopy,
             path,
             recursive,
             force,
@@ -31,6 +32,7 @@ pub async fn execute(
 }
 
 async fn remove_azure_object(
+    azcopy: &mut AzCopyClient,
     path: &str,
     recursive: bool,
     force: bool,
@@ -136,7 +138,6 @@ async fn remove_azure_object(
     println!(); // Blank line before AzCopy output
 
     // Use AzCopy for removal
-    let azcopy = AzCopyClient::new();
     azcopy.remove_with_options(&target_url, &options).await?;
 
     Ok(())
