@@ -5,6 +5,19 @@ use tokio::fs;
 use crate::azure::{convert_az_uri_to_url, AzCopyClient, AzCopyOptions};
 use crate::utils::{get_filename, get_parent_dir, is_azure_uri, is_directory, path_exists};
 
+pub struct CopyOptions<'a> {
+    pub source: &'a str,
+    pub destination: &'a str,
+    pub recursive: bool,
+    pub dry_run: bool,
+    pub cap_mbps: Option<f64>,
+    pub block_size_mb: Option<f64>,
+    pub put_md5: bool,
+    pub include_pattern: Option<&'a str>,
+    pub exclude_pattern: Option<&'a str>,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     source: &str,
     destination: &str,
@@ -16,6 +29,23 @@ pub async fn execute(
     include_pattern: Option<&str>,
     exclude_pattern: Option<&str>,
 ) -> Result<()> {
+    let options = CopyOptions {
+        source,
+        destination,
+        recursive,
+        dry_run,
+        cap_mbps,
+        block_size_mb,
+        put_md5,
+        include_pattern,
+        exclude_pattern,
+    };
+    execute_with_options(options).await
+}
+
+async fn execute_with_options(options: CopyOptions<'_>) -> Result<()> {
+    let source = options.source;
+    let destination = options.destination;
     let source_is_azure = is_azure_uri(source);
     let dest_is_azure = is_azure_uri(destination);
 
@@ -24,38 +54,21 @@ pub async fn execute(
             // Any Azure operation - use AzCopy for performance
             let azcopy = AzCopyClient::new();
             azcopy.check_prerequisites().await?;
-            copy_with_azcopy(
-                source,
-                destination,
-                recursive,
-                dry_run,
-                cap_mbps,
-                block_size_mb,
-                put_md5,
-                include_pattern,
-                exclude_pattern,
-            )
-            .await
+            copy_with_azcopy(options).await
         }
         (false, false) => {
             // Local to Local - use regular file copy
-            copy_local_files(source, destination, recursive).await
+            copy_local_files(source, destination, options.recursive).await
         }
     }
 }
 
 /// Copy using AzCopy for high performance
-async fn copy_with_azcopy(
-    source: &str,
-    destination: &str,
-    recursive: bool,
-    dry_run: bool,
-    cap_mbps: Option<f64>,
-    block_size_mb: Option<f64>,
-    put_md5: bool,
-    include_pattern: Option<&str>,
-    exclude_pattern: Option<&str>,
-) -> Result<()> {
+async fn copy_with_azcopy(options: CopyOptions<'_>) -> Result<()> {
+    let source = options.source;
+    let destination = options.destination;
+    let recursive = options.recursive;
+
     // Convert az:// URIs to HTTPS URLs for AzCopy
     let source_url = if is_azure_uri(source) {
         convert_az_uri_to_url(source)?
@@ -90,19 +103,19 @@ async fn copy_with_azcopy(
     if recursive {
         flags_display.push("recursive");
     }
-    if dry_run {
+    if options.dry_run {
         flags_display.push("dry-run");
     }
-    if cap_mbps.is_some() {
+    if options.cap_mbps.is_some() {
         flags_display.push("rate-limited");
     }
-    if block_size_mb.is_some() {
+    if options.block_size_mb.is_some() {
         flags_display.push("custom-block-size");
     }
-    if put_md5 {
+    if options.put_md5 {
         flags_display.push("md5-hashing");
     }
-    if include_pattern.is_some() {
+    if options.include_pattern.is_some() {
         flags_display.push("filtered");
     }
 
@@ -122,18 +135,18 @@ async fn copy_with_azcopy(
     );
 
     // Build options
-    let mut options = AzCopyOptions::new()
+    let mut azcopy_options = AzCopyOptions::new()
         .with_recursive(recursive)
-        .with_dry_run(dry_run)
-        .with_cap_mbps(cap_mbps)
-        .with_block_size_mb(block_size_mb)
-        .with_put_md5(put_md5);
+        .with_dry_run(options.dry_run)
+        .with_cap_mbps(options.cap_mbps)
+        .with_block_size_mb(options.block_size_mb)
+        .with_put_md5(options.put_md5);
 
-    if let Some(pattern) = include_pattern {
-        options = options.with_include_pattern(Some(pattern.to_string()));
+    if let Some(pattern) = options.include_pattern {
+        azcopy_options = azcopy_options.with_include_pattern(Some(pattern.to_string()));
     }
-    if let Some(pattern) = exclude_pattern {
-        options = options.with_exclude_pattern(Some(pattern.to_string()));
+    if let Some(pattern) = options.exclude_pattern {
+        azcopy_options = azcopy_options.with_exclude_pattern(Some(pattern.to_string()));
     }
 
     // Show the actual AzCopy command for debugging
@@ -141,22 +154,22 @@ async fn copy_with_azcopy(
     if recursive {
         cmd_parts.push("--recursive".to_string());
     }
-    if dry_run {
+    if options.dry_run {
         cmd_parts.push("--dry-run".to_string());
     }
-    if let Some(mbps) = cap_mbps {
+    if let Some(mbps) = options.cap_mbps {
         cmd_parts.push(format!("--cap-mbps={}", mbps));
     }
-    if let Some(block_size) = block_size_mb {
+    if let Some(block_size) = options.block_size_mb {
         cmd_parts.push(format!("--block-size-mb={}", block_size));
     }
-    if put_md5 {
+    if options.put_md5 {
         cmd_parts.push("--put-md5".to_string());
     }
-    if let Some(pattern) = include_pattern {
+    if let Some(pattern) = options.include_pattern {
         cmd_parts.push(format!("--include-pattern='{}'", pattern));
     }
-    if let Some(pattern) = exclude_pattern {
+    if let Some(pattern) = options.exclude_pattern {
         cmd_parts.push(format!("--exclude-pattern='{}'", pattern));
     }
     cmd_parts.push("--output-type json".to_string());
@@ -166,7 +179,7 @@ async fn copy_with_azcopy(
     // Use AzCopy for the operation
     let azcopy = AzCopyClient::new();
     azcopy
-        .copy_with_options(&source_url, &dest_url, &options)
+        .copy_with_options(&source_url, &dest_url, &azcopy_options)
         .await?;
 
     println!("{} Operation completed successfully", "✓".green());
