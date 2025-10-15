@@ -2,7 +2,26 @@ use anyhow::{anyhow, Result};
 use colored::*;
 
 use crate::azure::{AzureClient, BlobItem};
-use crate::utils::{format_size, is_azure_uri, parse_azure_uri};
+use crate::utils::{
+    contains_recursive_wildcard, format_size, is_azure_uri, matches_pattern, parse_azure_uri,
+    split_wildcard_path,
+};
+
+/// Calculate the depth of a pattern (number of path segments)
+/// Treats ** as matching any depth
+fn pattern_depth(pattern: &str) -> Option<usize> {
+    if pattern.contains("**") {
+        None // Infinite depth
+    } else {
+        // Count the number of path segments
+        Some(pattern.split('/').filter(|s| !s.is_empty()).count())
+    }
+}
+
+/// Get the depth of a path (number of segments)
+fn path_depth(path: &str) -> usize {
+    path.split('/').filter(|s| !s.is_empty()).count()
+}
 
 pub async fn execute(
     path: Option<&str>,
@@ -111,16 +130,148 @@ async fn list_azure_objects(
         return list_containers(long, &client).await;
     }
 
+    //Check if the prefix contains wildcards
+    let (list_prefix, pattern, force_recursive) = if let Some(prefix_str) = &prefix {
+        if let Some((before_wildcard, mut wildcard_pattern)) = split_wildcard_path(prefix_str) {
+            // Has wildcard: list with prefix before wildcard, then filter with pattern
+            // If pattern contains **, force recursive listing (no delimiter)
+            // Also force recursive if the wildcard pattern contains / (multi-segment pattern)
+            let is_recursive =
+                contains_recursive_wildcard(&wildcard_pattern) || wildcard_pattern.contains('/');
+
+            // If pattern ends with /, append * to match contents of that directory
+            if wildcard_pattern.ends_with('/') {
+                wildcard_pattern.push('*');
+            }
+
+            (
+                if before_wildcard.is_empty() {
+                    None
+                } else {
+                    Some(before_wildcard)
+                },
+                Some(wildcard_pattern),
+                is_recursive,
+            )
+        } else {
+            // No wildcard: use prefix as-is
+            (prefix.clone(), None, false)
+        }
+    } else {
+        // No prefix at all
+        (None, None, false)
+    };
+
     // Use delimiter for non-recursive listing (hierarchical, like gsutil default behavior)
-    // Omit delimiter for recursive listing (flat, shows all objects)
-    let delimiter = if recursive { None } else { Some("/") };
+    // Omit delimiter for recursive listing or when using ** wildcard
+    let delimiter = if recursive || force_recursive {
+        None
+    } else {
+        Some("/")
+    };
 
     let blobs = client
-        .list_blobs(&container, prefix.as_deref(), delimiter)
+        .list_blobs(&container, list_prefix.as_deref(), delimiter)
         .await?;
 
-    if blobs.is_empty() {
-        println!("No objects found in az://{}/", container);
+    // Filter blobs if we have a pattern
+    let filtered_blobs: Vec<BlobItem> = if let Some(ref pattern_str) = pattern {
+        // Calculate the expected depth based on the pattern
+        let expected_depth = pattern_depth(pattern_str);
+
+        // If we have a specific depth (not **) and we're NOT in explicit recursive mode,
+        // we need to extract directory prefixes at that depth (hierarchical view)
+        if let Some(depth) = expected_depth {
+            if force_recursive && !recursive {
+                // Extract unique prefixes at the target depth (non-recursive mode with multi-segment pattern)
+                let mut unique_prefixes = std::collections::HashSet::new();
+
+                for item in &blobs {
+                    let name = match item {
+                        BlobItem::Blob(blob) => &blob.name,
+                        BlobItem::Prefix(prefix) => prefix,
+                    };
+
+                    let match_part = if let Some(ref prefix) = list_prefix {
+                        name.strip_prefix(prefix).unwrap_or(name)
+                    } else {
+                        name
+                    };
+
+                    // Extract prefix at target depth
+                    let segments: Vec<&str> = match_part.split('/').collect();
+                    if segments.len() >= depth {
+                        let prefix_at_depth = segments[..depth].join("/") + "/";
+
+                        // Check if this prefix matches the pattern
+                        if matches_pattern(&prefix_at_depth, pattern_str) {
+                            unique_prefixes.insert(prefix_at_depth);
+                        }
+                    }
+                }
+
+                // Convert prefixes to BlobItem::Prefix
+                unique_prefixes
+                    .into_iter()
+                    .map(|prefix| {
+                        let full_name = if let Some(ref list_pfx) = list_prefix {
+                            format!("{}{}", list_pfx, prefix)
+                        } else {
+                            prefix
+                        };
+                        BlobItem::Prefix(full_name)
+                    })
+                    .collect()
+            } else {
+                // Regular filtering for non-recursive with delimiter
+                blobs
+                    .into_iter()
+                    .filter(|item| {
+                        let name = match item {
+                            BlobItem::Blob(blob) => &blob.name,
+                            BlobItem::Prefix(prefix) => prefix,
+                        };
+
+                        let match_part = if let Some(ref prefix) = list_prefix {
+                            name.strip_prefix(prefix).unwrap_or(name)
+                        } else {
+                            name
+                        };
+
+                        matches_pattern(match_part, pattern_str)
+                    })
+                    .collect()
+            }
+        } else {
+            // ** pattern - show all matches at any depth
+            blobs
+                .into_iter()
+                .filter(|item| {
+                    let name = match item {
+                        BlobItem::Blob(blob) => &blob.name,
+                        BlobItem::Prefix(prefix) => prefix,
+                    };
+
+                    let match_part = if let Some(ref prefix) = list_prefix {
+                        name.strip_prefix(prefix).unwrap_or(name)
+                    } else {
+                        name
+                    };
+
+                    matches_pattern(match_part, pattern_str)
+                })
+                .collect()
+        }
+    } else {
+        blobs
+    };
+
+    if filtered_blobs.is_empty() {
+        if pattern.is_some() {
+            println!("No objects matching pattern in az://{}/", container);
+        } else {
+            println!("No objects found in az://{}/", container);
+        }
         return Ok(());
     }
 
@@ -137,7 +288,7 @@ async fn list_azure_objects(
         println!("{}", "-".repeat(80).dimmed());
     }
 
-    for item in blobs {
+    for item in filtered_blobs {
         match item {
             BlobItem::Blob(blob) => {
                 let size_str = if human_readable {

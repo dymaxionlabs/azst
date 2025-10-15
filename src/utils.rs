@@ -143,6 +143,57 @@ pub fn normalize_path(path: &str) -> String {
     path.trim_end_matches('/').to_string()
 }
 
+/// Check if a path contains wildcard characters (*, ?, [, ])
+pub fn contains_wildcard(path: &str) -> bool {
+    path.contains('*') || path.contains('?') || path.contains('[')
+}
+
+/// Check if a pattern contains the recursive wildcard (**)
+pub fn contains_recursive_wildcard(pattern: &str) -> bool {
+    pattern.contains("**")
+}
+
+/// Split a path into (prefix_before_wildcard, pattern_with_wildcard)
+/// Returns None if there's no wildcard in the path
+///
+/// Examples:
+/// - "foo/bar/*.txt" -> Some(("foo/bar/", "*.txt"))
+/// - "foo/**/bar" -> Some(("foo/", "**/bar"))
+/// - "foo/bar" -> None
+pub fn split_wildcard_path(path: &str) -> Option<(String, String)> {
+    if !contains_wildcard(path) {
+        return None;
+    }
+
+    // Find the first wildcard character
+    let wildcard_pos = path
+        .find(|c| c == '*' || c == '?' || c == '[')
+        .unwrap_or(path.len());
+
+    // Find the last '/' before the wildcard
+    let prefix_end = path[..wildcard_pos]
+        .rfind('/')
+        .map(|pos| pos + 1)
+        .unwrap_or(0);
+
+    let prefix = path[..prefix_end].to_string();
+    let pattern = path[prefix_end..].to_string();
+
+    Some((prefix, pattern))
+}
+
+/// Match a path against a glob pattern
+/// Returns true if the path matches the pattern
+pub fn matches_pattern(path: &str, pattern: &str) -> bool {
+    use glob::Pattern;
+
+    if let Ok(glob_pattern) = Pattern::new(pattern) {
+        glob_pattern.matches(path)
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,5 +363,75 @@ mod tests {
         assert!(!is_storage_account_name("abc.123")); // dot
         assert!(!is_storage_account_name("abc 123")); // space
         assert!(!is_storage_account_name("ABC")); // uppercase
+    }
+
+    #[test]
+    fn test_contains_wildcard() {
+        assert!(contains_wildcard("foo/*.txt"));
+        assert!(contains_wildcard("foo/bar?"));
+        assert!(contains_wildcard("foo/[abc].txt"));
+        assert!(contains_wildcard("**"));
+        assert!(!contains_wildcard("foo/bar.txt"));
+        assert!(!contains_wildcard("foo/bar/"));
+    }
+
+    #[test]
+    fn test_contains_recursive_wildcard() {
+        assert!(contains_recursive_wildcard("**"));
+        assert!(contains_recursive_wildcard("foo/**"));
+        assert!(contains_recursive_wildcard("**/bar"));
+        assert!(contains_recursive_wildcard("foo/**/bar"));
+        assert!(!contains_recursive_wildcard("foo/*.txt"));
+        assert!(!contains_recursive_wildcard("foo/bar"));
+    }
+
+    #[test]
+    fn test_split_wildcard_path() {
+        // Single level wildcard
+        assert_eq!(
+            split_wildcard_path("foo/bar/*.txt"),
+            Some(("foo/bar/".to_string(), "*.txt".to_string()))
+        );
+
+        // Recursive wildcard
+        assert_eq!(
+            split_wildcard_path("foo/**/bar"),
+            Some(("foo/".to_string(), "**/bar".to_string()))
+        );
+
+        // Wildcard at root
+        assert_eq!(
+            split_wildcard_path("*.txt"),
+            Some(("".to_string(), "*.txt".to_string()))
+        );
+
+        // Multiple wildcards - splits at first
+        assert_eq!(
+            split_wildcard_path("foo/*/bar/*.txt"),
+            Some(("foo/".to_string(), "*/bar/*.txt".to_string()))
+        );
+
+        // No wildcard
+        assert_eq!(split_wildcard_path("foo/bar.txt"), None);
+    }
+
+    #[test]
+    fn test_matches_pattern() {
+        // Simple wildcard
+        assert!(matches_pattern("file.txt", "*.txt"));
+        assert!(matches_pattern("foo/bar.txt", "foo/*.txt"));
+        assert!(!matches_pattern("file.jpg", "*.txt"));
+
+        // Recursive wildcard
+        assert!(matches_pattern("foo/bar/baz.txt", "**/baz.txt"));
+        assert!(matches_pattern("foo/bar/baz/qux.txt", "foo/**/qux.txt"));
+
+        // Question mark
+        assert!(matches_pattern("file1.txt", "file?.txt"));
+        assert!(!matches_pattern("file10.txt", "file?.txt"));
+
+        // Character class
+        assert!(matches_pattern("file1.txt", "file[123].txt"));
+        assert!(!matches_pattern("file4.txt", "file[123].txt"));
     }
 }
