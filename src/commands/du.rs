@@ -300,7 +300,7 @@ async fn calculate_local_directory_sizes(
     // Recursive function to traverse directory tree
     fn traverse_dir<'a>(
         dir_path: &'a Path,
-        root: &'a Path,
+        _root: &'a Path,
         dir_sizes: &'a mut HashMap<String, u64>,
         summarize_only: bool,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<u64>> + Send + 'a>> {
@@ -317,7 +317,7 @@ async fn calculate_local_directory_sizes(
                 } else if metadata.is_dir() {
                     // Recursively calculate subdirectory size
                     let subdir_size =
-                        traverse_dir(&entry_path, root, dir_sizes, summarize_only).await?;
+                        traverse_dir(&entry_path, _root, dir_sizes, summarize_only).await?;
                     total_size += subdir_size;
 
                     // Store this subdirectory's size unless we're only summarizing the root

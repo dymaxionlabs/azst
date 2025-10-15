@@ -95,6 +95,76 @@ async fn list_containers(long: bool, azure_client: &AzureClient) -> Result<()> {
     Ok(())
 }
 
+/// Stream blob results directly without buffering - for non-wildcard listings
+async fn list_blobs_streaming(
+    client: &AzureClient,
+    container: &str,
+    actual_account: &str,
+    prefix: Option<&str>,
+    delimiter: Option<&str>,
+    long: bool,
+    human_readable: bool,
+) -> Result<()> {
+    let writer = create_writer();
+    writer.write_header(&format!(
+        "Contents of az://{}/{}:",
+        actual_account, container
+    ));
+
+    if long {
+        writer.write_table_header(&[("Size", 10), ("Type", 15), ("Modified", 20), ("Name", 0)]);
+        writer.write_separator(80);
+    }
+
+    let mut item_count = 0;
+
+    // Use the callback-based API to process items as they arrive
+    client
+        .list_blobs_with_callback(container, prefix, delimiter, |items| {
+            for item in items {
+                item_count += 1;
+                match item {
+                    BlobItem::Blob(blob) => {
+                        let size_str = if human_readable {
+                            format_size(blob.properties.content_length)
+                        } else {
+                            blob.properties.content_length.to_string()
+                        };
+
+                        let content_type = blob
+                            .properties
+                            .content_type
+                            .unwrap_or_else(|| "unknown".to_string());
+
+                        let blob_uri =
+                            format!("az://{}/{}/{}", actual_account, container, blob.name);
+
+                        writer.write_blob(
+                            &blob_uri,
+                            &size_str,
+                            &content_type,
+                            &blob.properties.last_modified,
+                            long,
+                        );
+                    }
+                    BlobItem::Prefix(prefix) => {
+                        let prefix_uri =
+                            format!("az://{}/{}/{}", actual_account, container, prefix);
+                        writer.write_prefix(&prefix_uri, long);
+                    }
+                }
+            }
+            Ok(())
+        })
+        .await?;
+
+    if item_count == 0 {
+        println!("No objects found in az://{}/{}/", actual_account, container);
+    }
+
+    Ok(())
+}
+
 async fn list_azure_objects(
     path: &str,
     long: bool,
@@ -162,6 +232,21 @@ async fn list_azure_objects(
         .get_storage_account()
         .ok_or_else(|| anyhow!("Storage account not configured"))?;
 
+    // If there's no pattern, we can stream results directly without buffering
+    if pattern.is_none() {
+        return list_blobs_streaming(
+            &client,
+            &container,
+            actual_account,
+            list_prefix.as_deref(),
+            delimiter,
+            long,
+            human_readable,
+        )
+        .await;
+    }
+
+    // For patterns, we need to collect and filter all results
     let blobs = client
         .list_blobs(&container, list_prefix.as_deref(), delimiter)
         .await?;

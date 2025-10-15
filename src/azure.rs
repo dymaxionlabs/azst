@@ -320,12 +320,67 @@ impl AzureClient {
     }
 
     /// List blobs in a container with optional prefix
+    /// This method automatically handles pagination to retrieve all results
     pub async fn list_blobs(
         &self,
         container: &str,
         prefix: Option<&str>,
         delimiter: Option<&str>,
     ) -> Result<Vec<BlobItem>> {
+        let mut all_items = Vec::new();
+
+        self.list_blobs_with_callback(container, prefix, delimiter, |items| {
+            all_items.extend(items);
+            Ok(())
+        })
+        .await?;
+
+        Ok(all_items)
+    }
+
+    /// List blobs in a container with a callback for each page
+    /// This allows processing results as they arrive without buffering everything in memory
+    pub async fn list_blobs_with_callback<F>(
+        &self,
+        container: &str,
+        prefix: Option<&str>,
+        delimiter: Option<&str>,
+        mut callback: F,
+    ) -> Result<()>
+    where
+        F: FnMut(Vec<BlobItem>) -> Result<()>,
+    {
+        let mut marker: Option<String> = None;
+
+        loop {
+            let (items, next_marker) = self
+                .list_blobs_page(container, prefix, delimiter, marker.as_deref())
+                .await?;
+
+            // Call the callback with this page's items
+            callback(items)?;
+
+            // If there's a next marker, continue fetching more pages
+            if let Some(next) = next_marker {
+                marker = Some(next);
+            } else {
+                // No more pages to fetch
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// List a single page of blobs in a container with optional prefix
+    /// Returns the items and an optional continuation marker for the next page
+    async fn list_blobs_page(
+        &self,
+        container: &str,
+        prefix: Option<&str>,
+        delimiter: Option<&str>,
+        marker: Option<&str>,
+    ) -> Result<(Vec<BlobItem>, Option<String>)> {
         let mut cmd = AsyncCommand::new("az");
         cmd.args([
             "storage",
@@ -335,6 +390,7 @@ impl AzureClient {
             container,
             "--output",
             "json",
+            "--show-next-marker",
         ]);
 
         if let Some(prefix_val) = prefix {
@@ -343,6 +399,10 @@ impl AzureClient {
 
         if let Some(delimiter_val) = delimiter {
             cmd.args(["--delimiter", delimiter_val]);
+        }
+
+        if let Some(marker_val) = marker {
+            cmd.args(["--marker", marker_val]);
         }
 
         if let Some(ref account) = self.config.storage_account {
@@ -380,8 +440,35 @@ impl AzureClient {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let items: Vec<BlobOrPrefix> =
+
+        // Azure CLI with --show-next-marker returns an array where the last element
+        // may be an object with only "nextMarker" field if there are more results
+        #[derive(Debug, Deserialize)]
+        #[serde(untagged)]
+        enum BlobListItem {
+            Blob(BlobOrPrefix),
+            NextMarker {
+                #[serde(rename = "nextMarker")]
+                next_marker: Option<String>,
+            },
+        }
+
+        let list_items: Vec<BlobListItem> =
             serde_json::from_str(&stdout).context("Failed to parse blob list JSON")?;
+
+        let mut items = Vec::new();
+        let mut next_marker = None;
+
+        for item in list_items {
+            match item {
+                BlobListItem::Blob(blob) => items.push(blob),
+                BlobListItem::NextMarker {
+                    next_marker: marker,
+                } => {
+                    next_marker = marker;
+                }
+            }
+        }
 
         // Convert BlobOrPrefix to BlobItem
         let blob_items = items
@@ -400,7 +487,7 @@ impl AzureClient {
             })
             .collect();
 
-        Ok(blob_items)
+        Ok((blob_items, next_marker))
     }
 
     /// Upload a file to Azure storage

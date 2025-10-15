@@ -166,9 +166,7 @@ pub fn split_wildcard_path(path: &str) -> Option<(String, String)> {
     }
 
     // Find the first wildcard character
-    let wildcard_pos = path
-        .find(|c| c == '*' || c == '?' || c == '[')
-        .unwrap_or(path.len());
+    let wildcard_pos = path.find(['*', '?', '[']).unwrap_or(path.len());
 
     // Find the last '/' before the wildcard
     let prefix_end = path[..wildcard_pos]
