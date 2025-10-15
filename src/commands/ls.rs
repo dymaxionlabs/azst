@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use colored::*;
 
-use crate::azure::AzureClient;
+use crate::azure::{AzureClient, BlobItem};
 use crate::utils::{format_size, is_azure_uri, parse_azure_uri};
 
 pub async fn execute(
@@ -111,15 +111,13 @@ async fn list_azure_objects(
         return list_containers(long, &client).await;
     }
 
-    // If there's no prefix (just az://account/container or az://account/container/), list container contents
-    let prefix = if recursive {
-        prefix
-    } else {
-        // For non-recursive listing, we need to handle directory-like behavior
-        prefix
-    };
+    // Use delimiter for non-recursive listing (hierarchical, like gsutil default behavior)
+    // Omit delimiter for recursive listing (flat, shows all objects)
+    let delimiter = if recursive { None } else { Some("/") };
 
-    let blobs = client.list_blobs(&container, prefix.as_deref()).await?;
+    let blobs = client
+        .list_blobs(&container, prefix.as_deref(), delimiter)
+        .await?;
 
     if blobs.is_empty() {
         println!("No objects found in az://{}/", container);
@@ -139,28 +137,46 @@ async fn list_azure_objects(
         println!("{}", "-".repeat(80).dimmed());
     }
 
-    for blob in blobs {
-        let size_str = if human_readable {
-            format_size(blob.properties.content_length)
-        } else {
-            blob.properties.content_length.to_string()
-        };
+    for item in blobs {
+        match item {
+            BlobItem::Blob(blob) => {
+                let size_str = if human_readable {
+                    format_size(blob.properties.content_length)
+                } else {
+                    blob.properties.content_length.to_string()
+                };
 
-        let content_type = blob
-            .properties
-            .content_type
-            .unwrap_or_else(|| "unknown".to_string());
+                let content_type = blob
+                    .properties
+                    .content_type
+                    .unwrap_or_else(|| "unknown".to_string());
 
-        if long {
-            println!(
-                "{:<10} {:<15} {:<20} {}",
-                size_str.green(),
-                content_type.yellow(),
-                blob.properties.last_modified.dimmed(),
-                format!("az://{}/{}", container, blob.name).cyan()
-            );
-        } else {
-            println!("{}", format!("az://{}/{}", container, blob.name).cyan());
+                if long {
+                    println!(
+                        "{:<10} {:<15} {:<20} {}",
+                        size_str.green(),
+                        content_type.yellow(),
+                        blob.properties.last_modified.dimmed(),
+                        format!("az://{}/{}", container, blob.name).cyan()
+                    );
+                } else {
+                    println!("{}", format!("az://{}/{}", container, blob.name).cyan());
+                }
+            }
+            BlobItem::Prefix(prefix) => {
+                // Display directory/prefix with trailing slash
+                if long {
+                    println!(
+                        "{:<10} {:<15} {:<20} {}",
+                        "-".dimmed(),
+                        "DIR".blue(),
+                        "-".dimmed(),
+                        format!("az://{}/{}", container, prefix).blue().bold()
+                    );
+                } else {
+                    println!("{}", format!("az://{}/{}", container, prefix).blue().bold());
+                }
+            }
         }
     }
 

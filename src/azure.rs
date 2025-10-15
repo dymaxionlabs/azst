@@ -139,6 +139,22 @@ pub struct BlobProperties {
     pub content_type: Option<String>,
 }
 
+/// Represents either a blob or a blob prefix (virtual directory)
+#[derive(Debug)]
+pub enum BlobItem {
+    Blob(BlobInfo),
+    Prefix(String),
+}
+
+/// Helper struct for deserializing Azure CLI output that may contain
+/// either full blobs or just blob prefixes (when using delimiter)
+#[derive(Debug, Deserialize)]
+struct BlobOrPrefix {
+    name: String,
+    #[serde(rename = "properties")]
+    properties: Option<BlobProperties>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ContainerInfo {
     pub name: String,
@@ -294,7 +310,12 @@ impl AzureClient {
     }
 
     /// List blobs in a container with optional prefix
-    pub async fn list_blobs(&self, container: &str, prefix: Option<&str>) -> Result<Vec<BlobInfo>> {
+    pub async fn list_blobs(
+        &self,
+        container: &str,
+        prefix: Option<&str>,
+        delimiter: Option<&str>,
+    ) -> Result<Vec<BlobItem>> {
         let mut cmd = AsyncCommand::new("az");
         cmd.args([
             "storage",
@@ -308,6 +329,10 @@ impl AzureClient {
 
         if let Some(prefix_val) = prefix {
             cmd.args(["--prefix", prefix_val]);
+        }
+
+        if let Some(delimiter_val) = delimiter {
+            cmd.args(["--delimiter", delimiter_val]);
         }
 
         if let Some(ref account) = self.config.storage_account {
@@ -325,10 +350,27 @@ impl AzureClient {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let blobs: Vec<BlobInfo> =
+        let items: Vec<BlobOrPrefix> =
             serde_json::from_str(&stdout).context("Failed to parse blob list JSON")?;
 
-        Ok(blobs)
+        // Convert BlobOrPrefix to BlobItem
+        let blob_items = items
+            .into_iter()
+            .map(|item| {
+                if let Some(props) = item.properties {
+                    // This is a full blob with properties
+                    BlobItem::Blob(BlobInfo {
+                        name: item.name,
+                        properties: props,
+                    })
+                } else {
+                    // This is a blob prefix (virtual directory)
+                    BlobItem::Prefix(item.name)
+                }
+            })
+            .collect();
+
+        Ok(blob_items)
     }
 
     /// Upload a file to Azure storage
