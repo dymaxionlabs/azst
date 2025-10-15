@@ -299,6 +299,16 @@ impl AzureClient {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+
+            // Parse common errors and provide user-friendly messages
+            if stderr.contains("Storage account") && stderr.contains("not found") {
+                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
+                return Err(anyhow!(
+                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
+                    account_name
+                ));
+            }
+
             return Err(anyhow!("Azure CLI error: {}", stderr));
         }
 
@@ -346,6 +356,26 @@ impl AzureClient {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+
+            // Parse common errors and provide user-friendly messages
+            if stderr.contains("Storage account") && stderr.contains("not found") {
+                let account_name = self.config.storage_account.as_deref().unwrap_or("unknown");
+                return Err(anyhow!(
+                    "Storage account '{}' not found. Please verify the account name and ensure you have access to it.",
+                    account_name
+                ));
+            } else if stderr.contains("container") && stderr.contains("not found") {
+                return Err(anyhow!(
+                    "Container '{}' not found. Please verify the container name.",
+                    container
+                ));
+            } else if stderr.contains("The specified container does not exist") {
+                return Err(anyhow!(
+                    "Container '{}' does not exist. Please create the container first.",
+                    container
+                ));
+            }
+
             return Err(anyhow!("Azure CLI error: {}", stderr));
         }
 
