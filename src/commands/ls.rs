@@ -1,8 +1,7 @@
 use anyhow::{anyhow, Result};
-use colored::*;
-use std::io::{self, IsTerminal};
 
 use crate::azure::{AzureClient, BlobItem};
+use crate::output::create_writer;
 use crate::utils::{
     contains_recursive_wildcard, format_size, is_azure_uri, matches_pattern, parse_azure_uri,
     split_wildcard_path,
@@ -53,36 +52,16 @@ async fn list_storage_accounts(long: bool, azure_client: &AzureClient) -> Result
         return Ok(());
     }
 
-    let is_tty = io::stdout().is_terminal();
-
-    if is_tty {
-        println!("{}", "Azure Storage Accounts:".bold());
-    }
+    let writer = create_writer();
+    writer.write_header("Azure Storage Accounts:");
 
     for account in accounts {
-        if long {
-            if is_tty {
-                println!(
-                    "{:<30} {:<15} {}",
-                    format!("az://{}/", account.name).cyan(),
-                    account.location.dimmed(),
-                    account.resource_group.yellow()
-                );
-            } else {
-                println!(
-                    "{:<30} {:<15} {}",
-                    format!("az://{}/", account.name),
-                    account.location,
-                    account.resource_group
-                );
-            }
-        } else {
-            if is_tty {
-                println!("{}", format!("az://{}/", account.name).cyan());
-            } else {
-                println!("{}", format!("az://{}/", account.name));
-            }
-        }
+        writer.write_storage_account(
+            &account.name,
+            &account.location,
+            &account.resource_group,
+            long,
+        );
     }
 
     Ok(())
@@ -96,11 +75,8 @@ async fn list_containers(long: bool, azure_client: &AzureClient) -> Result<()> {
         return Ok(());
     }
 
-    let is_tty = io::stdout().is_terminal();
-
-    if is_tty {
-        println!("{}", "Azure Storage Containers:".bold());
-    }
+    let writer = create_writer();
+    writer.write_header("Azure Storage Containers:");
 
     // Get the account name from the client
     let account_name = azure_client
@@ -108,30 +84,12 @@ async fn list_containers(long: bool, azure_client: &AzureClient) -> Result<()> {
         .ok_or_else(|| anyhow!("Storage account not configured"))?;
 
     for container in containers {
-        if long {
-            if is_tty {
-                println!(
-                    "{:<30} {}",
-                    format!("az://{}/{}/", account_name, container.name).cyan(),
-                    container.properties.last_modified.dimmed()
-                );
-            } else {
-                println!(
-                    "{:<30} {}",
-                    format!("az://{}/{}/", account_name, container.name),
-                    container.properties.last_modified
-                );
-            }
-        } else {
-            if is_tty {
-                println!(
-                    "{}",
-                    format!("az://{}/{}/", account_name, container.name).cyan()
-                );
-            } else {
-                println!("{}", format!("az://{}/{}/", account_name, container.name));
-            }
-        }
+        writer.write_container(
+            account_name,
+            &container.name,
+            &container.properties.last_modified,
+            long,
+        );
     }
 
     Ok(())
@@ -312,25 +270,15 @@ async fn list_azure_objects(
         return Ok(());
     }
 
-    // Check if stdout is a TTY - only show headers/colors when outputting to terminal
-    let is_tty = io::stdout().is_terminal();
+    let writer = create_writer();
+    writer.write_header(&format!(
+        "Contents of az://{}/{}:",
+        actual_account, container
+    ));
 
-    if is_tty {
-        println!(
-            "{}",
-            format!("Contents of az://{}/{}:", actual_account, container).bold()
-        );
-    }
-
-    if long && is_tty {
-        println!(
-            "{:<10} {:<15} {:<20} {}",
-            "Size".bold(),
-            "Type".bold(),
-            "Modified".bold(),
-            "Name".bold()
-        );
-        println!("{}", "-".repeat(80).dimmed());
+    if long {
+        writer.write_table_header(&[("Size", 10), ("Type", 15), ("Modified", 20), ("Name", 0)]);
+        writer.write_separator(80);
     }
 
     for item in filtered_blobs {
@@ -349,52 +297,18 @@ async fn list_azure_objects(
 
                 let blob_uri = format!("az://{}/{}/{}", actual_account, container, blob.name);
 
-                if long {
-                    if is_tty {
-                        println!(
-                            "{:<10} {:<15} {:<20} {}",
-                            size_str.green(),
-                            content_type.yellow(),
-                            blob.properties.last_modified.dimmed(),
-                            blob_uri.cyan()
-                        );
-                    } else {
-                        println!(
-                            "{:<10} {:<15} {:<20} {}",
-                            size_str, content_type, blob.properties.last_modified, blob_uri
-                        );
-                    }
-                } else {
-                    if is_tty {
-                        println!("{}", blob_uri.cyan());
-                    } else {
-                        println!("{}", blob_uri);
-                    }
-                }
+                writer.write_blob(
+                    &blob_uri,
+                    &size_str,
+                    &content_type,
+                    &blob.properties.last_modified,
+                    long,
+                );
             }
             BlobItem::Prefix(prefix) => {
                 // Display directory/prefix with trailing slash
                 let prefix_uri = format!("az://{}/{}/{}", actual_account, container, prefix);
-
-                if long {
-                    if is_tty {
-                        println!(
-                            "{:<10} {:<15} {:<20} {}",
-                            "-".dimmed(),
-                            "DIR".blue(),
-                            "-".dimmed(),
-                            prefix_uri.blue().bold()
-                        );
-                    } else {
-                        println!("{:<10} {:<15} {:<20} {}", "-", "DIR", "-", prefix_uri);
-                    }
-                } else {
-                    if is_tty {
-                        println!("{}", prefix_uri.blue().bold());
-                    } else {
-                        println!("{}", prefix_uri);
-                    }
-                }
+                writer.write_prefix(&prefix_uri, long);
             }
         }
     }
@@ -430,7 +344,7 @@ async fn list_local_path(
 async fn list_single_file(path: &str, long: bool, human_readable: bool) -> Result<()> {
     use tokio::fs;
 
-    let is_tty = io::stdout().is_terminal();
+    let writer = create_writer();
 
     if long {
         let metadata = fs::metadata(path).await?;
@@ -441,17 +355,9 @@ async fn list_single_file(path: &str, long: bool, human_readable: bool) -> Resul
             size.to_string()
         };
 
-        if is_tty {
-            println!("{:<10} {}", size_str.green(), path.cyan());
-        } else {
-            println!("{:<10} {}", size_str, path);
-        }
+        writer.write_local_file(path, &size_str, "file", long);
     } else {
-        if is_tty {
-            println!("{}", path.cyan());
-        } else {
-            println!("{}", path);
-        }
+        writer.write_local_file(path, "", "file", long);
     }
 
     Ok(())
@@ -465,16 +371,11 @@ async fn list_directory(
 ) -> Result<()> {
     use tokio::fs;
 
-    let is_tty = io::stdout().is_terminal();
+    let writer = create_writer();
 
-    if long && is_tty {
-        println!(
-            "{:<10} {:<10} {}",
-            "Size".bold(),
-            "Type".bold(),
-            "Name".bold()
-        );
-        println!("{}", "-".repeat(50).dimmed());
+    if long {
+        writer.write_table_header(&[("Size", 10), ("Type", 10), ("Name", 0)]);
+        writer.write_separator(50);
     }
 
     if recursive {
@@ -496,50 +397,21 @@ async fn list_directory(
                     size.to_string()
                 };
 
-                let type_str = if metadata.is_dir() {
-                    "dir".to_string()
+                let type_str = if metadata.is_dir() { "dir" } else { "file" };
+                let display_name = if metadata.is_dir() {
+                    format!("{}/", name_str)
                 } else {
-                    "file".to_string()
+                    name_str.to_string()
                 };
 
-                if is_tty {
-                    let display_name = if metadata.is_dir() {
-                        format!("{}/", name_str).blue()
-                    } else {
-                        name_str.normal()
-                    };
-
-                    println!(
-                        "{:<10} {:<10} {}",
-                        size_str.green(),
-                        type_str.yellow(),
-                        display_name
-                    );
-                } else {
-                    let display_name = if metadata.is_dir() {
-                        format!("{}/", name_str)
-                    } else {
-                        name_str.to_string()
-                    };
-
-                    println!("{:<10} {:<10} {}", size_str, type_str, display_name);
-                }
+                writer.write_local_file(&display_name, &size_str, type_str, long);
             } else {
-                if is_tty {
-                    let display_name = if entry_path.is_dir() {
-                        format!("{}/", name_str).blue()
-                    } else {
-                        name_str.to_string().normal()
-                    };
-                    println!("{}", display_name);
+                let display_name = if entry_path.is_dir() {
+                    format!("{}/", name_str)
                 } else {
-                    let display_name = if entry_path.is_dir() {
-                        format!("{}/", name_str)
-                    } else {
-                        name_str.to_string()
-                    };
-                    println!("{}", display_name);
-                }
+                    name_str.to_string()
+                };
+                writer.write_local_file(&display_name, "", "file", long);
             }
         }
 
@@ -556,7 +428,7 @@ fn list_directory_recursive<'a>(
     Box::pin(async move {
         use tokio::fs;
 
-        let is_tty = io::stdout().is_terminal();
+        let writer = create_writer();
         let mut entries = fs::read_dir(dir_path).await?;
 
         while let Some(entry) = entries.next_entry().await? {
@@ -578,50 +450,21 @@ fn list_directory_recursive<'a>(
                     size.to_string()
                 };
 
-                let type_str = if metadata.is_dir() {
-                    "dir".to_string()
+                let type_str = if metadata.is_dir() { "dir" } else { "file" };
+                let display_name = if metadata.is_dir() {
+                    format!("{}/", full_name)
                 } else {
-                    "file".to_string()
+                    full_name.to_string()
                 };
 
-                if is_tty {
-                    let display_name = if metadata.is_dir() {
-                        format!("{}/", full_name).blue()
-                    } else {
-                        full_name.normal()
-                    };
-
-                    println!(
-                        "{:<10} {:<10} {}",
-                        size_str.green(),
-                        type_str.yellow(),
-                        display_name
-                    );
-                } else {
-                    let display_name = if metadata.is_dir() {
-                        format!("{}/", full_name)
-                    } else {
-                        full_name.to_string()
-                    };
-
-                    println!("{:<10} {:<10} {}", size_str, type_str, display_name);
-                }
+                writer.write_local_file(&display_name, &size_str, type_str, long);
             } else {
-                if is_tty {
-                    let display_name = if entry_path.is_dir() {
-                        format!("{}/", full_name).blue()
-                    } else {
-                        full_name.normal()
-                    };
-                    println!("{}", display_name);
+                let display_name = if entry_path.is_dir() {
+                    format!("{}/", full_name)
                 } else {
-                    let display_name = if entry_path.is_dir() {
-                        format!("{}/", full_name)
-                    } else {
-                        full_name.to_string()
-                    };
-                    println!("{}", display_name);
-                }
+                    full_name.to_string()
+                };
+                writer.write_local_file(&display_name, "", "file", long);
             }
 
             // Recursively list subdirectories

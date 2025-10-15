@@ -6,6 +6,7 @@ mod azcopy_output;
 mod azure;
 mod cli;
 mod commands;
+mod output;
 mod utils;
 
 use cli::Cli;
