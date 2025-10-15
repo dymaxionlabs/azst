@@ -33,28 +33,39 @@ While AzCopy is powerful, it requires verbose HTTPS URLs. **azst** provides:
 
 ## Prerequisites
 
-1. **Azure CLI**: Install from [https://docs.microsoft.com/en-us/cli/azure/install-azure-cli](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
+1. **Azure CLI**: Install from
+   [https://docs.microsoft.com/en-us/cli/azure/install-azure-cli](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
 2. **Authentication**: Run `az login` to authenticate with Azure
 
-**Note**: AzCopy will be automatically downloaded and installed during the installation process.
+**Note**: AzCopy will be automatically downloaded and installed during the
+installation process.
 
 ## Installation
 
 ### Quick Install (Recommended)
 
-Install the latest build using curl:
-
+**macOS / Linux / WSL:**
 ```bash
 curl -sSL https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.sh | bash
 ```
 
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/dymaxionlabs/azst/main/install.ps1 | iex
+```
+
 This will download and install:
-- The latest `azst` binary from the `main` branch for your system to `~/.local/bin/`
-- AzCopy version 10.30.1 to `~/.local/share/azst/azcopy/` (if not already present)
+- The latest `azst` binary from the `main` branch for your system
+- AzCopy version 10.30.1 (if not already present)
+
+**Installation locations:**
+- Linux/macOS: `~/.local/bin/azst`
+- Windows: `%LOCALAPPDATA%\Programs\azst\azst.exe`
 
 ### Manual Installation
 
-Download the latest build for your platform from the [releases page](https://github.com/dymaxionlabs/azst/releases/tag/latest).
+Download the latest build for your platform from the
+[releases page](https://github.com/dymaxionlabs/azst/releases/tag/latest).
 
 #### macOS / Linux
 
@@ -75,7 +86,25 @@ export PATH="$PATH:~/.local/bin"  # Add to your ~/.bashrc or ~/.zshrc
 
 Download the `.zip` file, extract it, and add the directory to your PATH.
 
-**Note**: The installation script automatically downloads AzCopy v10.30.1 for Linux, macOS, and Windows (when run in Git Bash, WSL, or similar shell environments). For manual installation, AzCopy can be installed separately from [https://aka.ms/downloadazcopy](https://aka.ms/downloadazcopy).
+**Using PowerShell:**
+```powershell
+# Extract to a directory
+Expand-Archive -Path azst-windows-x86_64.exe.zip -DestinationPath $env:LOCALAPPDATA\Programs\azst
+
+# Add to PATH (run as administrator or add to User PATH)
+$Path = [Environment]::GetEnvironmentVariable("Path", "User")
+[Environment]::SetEnvironmentVariable("Path", "$Path;$env:LOCALAPPDATA\Programs\azst", "User")
+```
+
+**Or using File Explorer:**
+1. Extract the .zip file to a folder (e.g., `C:\Program Files\azst`)
+2. Add that folder to your system PATH:
+   - Search for "Environment Variables" in Windows
+   - Edit the "Path" variable
+   - Add the folder path
+
+**Note**: AzCopy will be automatically downloaded and installed during the
+installation process for all platforms.
 
 ### Build from Source
 
@@ -132,7 +161,8 @@ Examples:
 - `az://myaccount/mycontainer/prefix/` - List objects with prefix
 - `az://myaccount/mycontainer/file.txt` - Specific object
 
-**Note:** The `az://` URI scheme is specific to `azst` and is not used by official Microsoft Azure tools.
+**Note:** The `az://` URI scheme is specific to `azst` and is not used by
+official Microsoft Azure tools.
 
 ## Configuration
 
