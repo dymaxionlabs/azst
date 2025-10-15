@@ -222,6 +222,42 @@ azst cp -r --cap-mbps 100 /large/files/ az://myaccount/container/
 azst sync --cap-mbps 50 /backups/ az://myaccount/backup-container/
 ```
 
+### Performance Tuning
+
+Optimize transfer performance with block size control:
+
+```bash
+# Use larger block sizes for large files (default: auto-calculated)
+azst cp -r --block-size-mb 32 /big-videos/ az://myaccount/media/
+
+# Use smaller block sizes for many small files
+azst cp -r --block-size-mb 4 /logs/ az://myaccount/logs/
+
+# Combine with bandwidth limiting for controlled uploads
+azst sync --block-size-mb 16 --cap-mbps 100 /data/ az://myaccount/backup/
+```
+
+**Recommended block sizes:**
+- Small files (< 10 MB): 4-8 MiB
+- Medium files (10-100 MB): 8-16 MiB
+- Large files (> 100 MB): 16-32 MiB
+- Very large files (> 1 GB): 32-100 MiB
+
+### Data Integrity
+
+Enable MD5 hashing to ensure data integrity:
+
+```bash
+# Create MD5 hashes during upload
+azst cp -r --put-md5 /important-data/ az://myaccount/backup/
+
+# Useful for critical data that requires verification
+azst sync --put-md5 /production-db/ az://myaccount/db-backup/
+```
+
+**Note:** MD5 hashing adds some overhead but ensures data integrity. The hash is
+saved as the blob's Content-MD5 property.
+
 ### Pattern Filtering
 
 Filter files using wildcards during copy, sync, or remove operations:

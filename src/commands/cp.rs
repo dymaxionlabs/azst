@@ -11,6 +11,8 @@ pub async fn execute(
     recursive: bool,
     dry_run: bool,
     cap_mbps: Option<f64>,
+    block_size_mb: Option<f64>,
+    put_md5: bool,
     include_pattern: Option<&str>,
     exclude_pattern: Option<&str>,
 ) -> Result<()> {
@@ -28,6 +30,8 @@ pub async fn execute(
                 recursive,
                 dry_run,
                 cap_mbps,
+                block_size_mb,
+                put_md5,
                 include_pattern,
                 exclude_pattern,
             )
@@ -47,6 +51,8 @@ async fn copy_with_azcopy(
     recursive: bool,
     dry_run: bool,
     cap_mbps: Option<f64>,
+    block_size_mb: Option<f64>,
+    put_md5: bool,
     include_pattern: Option<&str>,
     exclude_pattern: Option<&str>,
 ) -> Result<()> {
@@ -90,6 +96,12 @@ async fn copy_with_azcopy(
     if cap_mbps.is_some() {
         flags_display.push("rate-limited");
     }
+    if block_size_mb.is_some() {
+        flags_display.push("custom-block-size");
+    }
+    if put_md5 {
+        flags_display.push("md5-hashing");
+    }
     if include_pattern.is_some() {
         flags_display.push("filtered");
     }
@@ -113,7 +125,9 @@ async fn copy_with_azcopy(
     let mut options = AzCopyOptions::new()
         .with_recursive(recursive)
         .with_dry_run(dry_run)
-        .with_cap_mbps(cap_mbps);
+        .with_cap_mbps(cap_mbps)
+        .with_block_size_mb(block_size_mb)
+        .with_put_md5(put_md5);
 
     if let Some(pattern) = include_pattern {
         options = options.with_include_pattern(Some(pattern.to_string()));
@@ -132,6 +146,12 @@ async fn copy_with_azcopy(
     }
     if let Some(mbps) = cap_mbps {
         cmd_parts.push(format!("--cap-mbps={}", mbps));
+    }
+    if let Some(block_size) = block_size_mb {
+        cmd_parts.push(format!("--block-size-mb={}", block_size));
+    }
+    if put_md5 {
+        cmd_parts.push("--put-md5".to_string());
     }
     if let Some(pattern) = include_pattern {
         cmd_parts.push(format!("--include-pattern='{}'", pattern));

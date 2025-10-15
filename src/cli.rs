@@ -29,6 +29,12 @@ pub enum Commands {
         /// Limit transfer rate in megabits per second
         #[arg(long)]
         cap_mbps: Option<f64>,
+        /// Block size in MiB for upload/download (e.g., 8, 16, 32)
+        #[arg(long)]
+        block_size_mb: Option<f64>,
+        /// Create MD5 hash for each file and save as Content-MD5 property
+        #[arg(long)]
+        put_md5: bool,
         /// Include only files matching this pattern (supports wildcards like *.jpg;*.pdf)
         #[arg(long)]
         include_pattern: Option<String>,
@@ -104,6 +110,12 @@ pub enum Commands {
         /// Limit transfer rate in megabits per second
         #[arg(long)]
         cap_mbps: Option<f64>,
+        /// Block size in MiB for upload/download (e.g., 8, 16, 32)
+        #[arg(long)]
+        block_size_mb: Option<f64>,
+        /// Create MD5 hash for each file and save as Content-MD5 property
+        #[arg(long)]
+        put_md5: bool,
         /// Include only files matching this pattern (supports wildcards like *.jpg;*.pdf)
         #[arg(long)]
         include_pattern: Option<String>,
@@ -122,6 +134,8 @@ impl Cli {
                 recursive,
                 dry_run,
                 cap_mbps,
+                block_size_mb,
+                put_md5,
                 include_pattern,
                 exclude_pattern,
             } => {
@@ -131,6 +145,8 @@ impl Cli {
                     *recursive,
                     *dry_run,
                     *cap_mbps,
+                    *block_size_mb,
+                    *put_md5,
                     include_pattern.as_deref(),
                     exclude_pattern.as_deref(),
                 )
@@ -183,6 +199,8 @@ impl Cli {
                 force,
                 dry_run,
                 cap_mbps,
+                block_size_mb,
+                put_md5,
                 include_pattern,
                 exclude_pattern,
             } => {
@@ -193,6 +211,8 @@ impl Cli {
                     *force,
                     *dry_run,
                     *cap_mbps,
+                    *block_size_mb,
+                    *put_md5,
                     include_pattern.as_deref(),
                     exclude_pattern.as_deref(),
                 )

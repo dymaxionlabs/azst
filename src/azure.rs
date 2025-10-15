@@ -12,6 +12,8 @@ pub struct AzCopyOptions {
     pub recursive: bool,
     pub dry_run: bool,
     pub cap_mbps: Option<f64>,
+    pub block_size_mb: Option<f64>,
+    pub put_md5: bool,
     pub include_pattern: Option<String>,
     pub exclude_pattern: Option<String>,
 }
@@ -33,6 +35,16 @@ impl AzCopyOptions {
 
     pub fn with_cap_mbps(mut self, cap_mbps: Option<f64>) -> Self {
         self.cap_mbps = cap_mbps;
+        self
+    }
+
+    pub fn with_block_size_mb(mut self, block_size_mb: Option<f64>) -> Self {
+        self.block_size_mb = block_size_mb;
+        self
+    }
+
+    pub fn with_put_md5(mut self, put_md5: bool) -> Self {
+        self.put_md5 = put_md5;
         self
     }
 
@@ -60,12 +72,41 @@ impl AzCopyOptions {
             cmd.arg(format!("--cap-mbps={}", mbps));
         }
 
+        if let Some(block_size) = self.block_size_mb {
+            cmd.arg(format!("--block-size-mb={}", block_size));
+        }
+
+        if self.put_md5 {
+            cmd.arg("--put-md5");
+        }
+
         if let Some(pattern) = &self.include_pattern {
             cmd.arg(format!("--include-pattern={}", pattern));
         }
 
         if let Some(pattern) = &self.exclude_pattern {
             cmd.arg(format!("--exclude-pattern={}", pattern));
+        }
+    }
+
+    /// Apply environment variable tuning settings
+    pub fn apply_env_vars(cmd: &mut AsyncCommand) {
+        // Pass through performance-related environment variables if set
+        let env_vars = [
+            "AZCOPY_CONCURRENCY_VALUE",
+            "AZCOPY_CONCURRENT_FILES",
+            "AZCOPY_CONCURRENT_SCAN",
+            "AZCOPY_BUFFER_GB",
+            "AZCOPY_LOG_LOCATION",
+            "AZCOPY_JOB_PLAN_LOCATION",
+            "AZCOPY_DISABLE_HIERARCHICAL_SCAN",
+            "AZCOPY_PARALLEL_STAT_FILES",
+        ];
+
+        for var in &env_vars {
+            if let Ok(val) = std::env::var(var) {
+                cmd.env(var, val);
+            }
         }
     }
 }
@@ -707,6 +748,9 @@ impl AzCopyClient {
         // This is set via environment variable
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
+        // Apply environment variable tuning settings
+        AzCopyOptions::apply_env_vars(&mut cmd);
+
         // Capture stdout to parse JSON output
         // All azcopy output goes to stdout with --output-type json
         cmd.stdout(std::process::Stdio::piped());
@@ -777,6 +821,14 @@ impl AzCopyClient {
             cmd.arg(format!("--cap-mbps={}", mbps));
         }
 
+        if let Some(block_size) = options.block_size_mb {
+            cmd.arg(format!("--block-size-mb={}", block_size));
+        }
+
+        if options.put_md5 {
+            cmd.arg("--put-md5");
+        }
+
         if let Some(pattern) = &options.include_pattern {
             cmd.arg(format!("--include-pattern={}", pattern));
         }
@@ -787,6 +839,9 @@ impl AzCopyClient {
 
         // Use Azure CLI credentials
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
+
+        // Apply environment variable tuning settings
+        AzCopyOptions::apply_env_vars(&mut cmd);
 
         // Inherit stdout/stderr so user sees real-time progress
         cmd.stdout(std::process::Stdio::inherit());
@@ -827,6 +882,9 @@ impl AzCopyClient {
 
         // Use Azure CLI credentials
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
+
+        // Apply environment variable tuning settings
+        AzCopyOptions::apply_env_vars(&mut cmd);
 
         // Capture stdout to parse JSON output
         // All azcopy output goes to stdout with --output-type json
