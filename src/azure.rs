@@ -636,9 +636,6 @@ impl AzCopyClient {
         // This is set via environment variable
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
-        // Run from temp directory to avoid creating latest_version.txt in current dir
-        cmd.current_dir(std::env::temp_dir());
-
         // Capture stdout to parse JSON output
         // All azcopy output goes to stdout with --output-type json
         cmd.stdout(std::process::Stdio::piped());
@@ -689,9 +686,6 @@ impl AzCopyClient {
         // Use Azure CLI credentials
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
-        // Run from temp directory to avoid creating latest_version.txt in current dir
-        cmd.current_dir(std::env::temp_dir());
-
         // Inherit stdout/stderr so user sees real-time progress
         cmd.stdout(std::process::Stdio::inherit());
         cmd.stderr(std::process::Stdio::inherit());
@@ -720,26 +714,44 @@ impl AzCopyClient {
             cmd.arg("--recursive");
         }
 
+        // Use JSON output for better parsing
+        cmd.args(["--output-type", "json"]);
+
         // Use Azure CLI credentials
         cmd.env("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI");
 
-        // Run from temp directory to avoid creating latest_version.txt in current dir
-        cmd.current_dir(std::env::temp_dir());
+        // Capture stdout to parse JSON output
+        // All azcopy output goes to stdout with --output-type json
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::null()); // Discard stderr
 
-        // Inherit stdout/stderr so user sees real-time progress
-        cmd.stdout(std::process::Stdio::inherit());
-        cmd.stderr(std::process::Stdio::inherit());
+        let mut child = cmd.spawn().context("Failed to execute azcopy remove")?;
 
-        let status = cmd
-            .status()
-            .await
-            .context("Failed to execute azcopy remove")?;
+        // Process stdout
+        let failed_count = if let Some(stdout) = child.stdout.take() {
+            crate::azcopy_output::handle_azcopy_output_with_operation(
+                stdout,
+                crate::azcopy_output::AzCopyOperation::Remove,
+            )
+            .await?
+        } else {
+            0
+        };
 
+        let status = child.wait().await.context("Failed to wait for azcopy")?;
+
+        // Exit code 1 with failed transfers is expected - show warning but don't fail
         if !status.success() {
-            return Err(anyhow!(
-                "AzCopy remove operation failed with exit code: {}",
-                status.code().unwrap_or(-1)
-            ));
+            if failed_count > 0 {
+                // CompletedWithErrors - warning already shown, don't fail the operation
+                return Ok(());
+            } else {
+                // Actual failure
+                return Err(anyhow!(
+                    "AzCopy remove operation failed with exit code: {}",
+                    status.code().unwrap_or(-1)
+                ));
+            }
         }
 
         Ok(())

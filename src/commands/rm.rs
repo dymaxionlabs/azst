@@ -28,10 +28,12 @@ async fn remove_azure_object(path: &str, recursive: bool, force: bool) -> Result
 
     // Check if trying to remove entire container
     if blob_path.is_none() {
-        return Err(anyhow!(
-            "Cannot remove entire container with rm. Use 'azst rb' instead"
-        ));
+        return Err(anyhow!("Cannot remove entire container with rm"));
     }
+
+    // Auto-enable recursive if path contains wildcards
+    let has_wildcard = path.contains('*') || path.contains('?');
+    let recursive = recursive || has_wildcard;
 
     // Prompt for confirmation unless force flag is set
     if !force {
@@ -68,7 +70,11 @@ async fn remove_azure_object(path: &str, recursive: bool, force: bool) -> Result
     println!(
         "{} {}",
         "⚙".dimmed(),
-        format!("azcopy remove '{}'{}", target_url, recursive_flag).dimmed()
+        format!(
+            "azcopy remove '{}'{} --output-type json",
+            target_url, recursive_flag
+        )
+        .dimmed()
     );
     println!(); // Blank line before AzCopy output
 
@@ -76,8 +82,6 @@ async fn remove_azure_object(path: &str, recursive: bool, force: bool) -> Result
     let azcopy = AzCopyClient::new();
     azcopy.remove(&target_url, recursive).await?;
 
-    println!(); // Blank line after AzCopy output
-    println!("{} Removed successfully", "✓".green());
     Ok(())
 }
 

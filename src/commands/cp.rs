@@ -96,7 +96,6 @@ async fn copy_with_azcopy(
         .copy(&source_url, &dest_url, recursive, parallel)
         .await?;
 
-    println!(); // Blank line after AzCopy output
     println!("{} Operation completed successfully", "✓".green());
     Ok(())
 }

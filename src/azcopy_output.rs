@@ -79,14 +79,38 @@ pub struct InitMessage {
     pub is_cleanup_job: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+pub enum AzCopyOperation {
+    Copy,
+    Remove,
+    Sync,
+}
+
 /// Parse and display AzCopy JSON output with a progress bar
 /// Returns the number of failed transfers
 pub async fn handle_azcopy_output<R: AsyncRead + Unpin>(stream: R) -> Result<u32> {
+    handle_azcopy_output_with_operation(stream, AzCopyOperation::Copy).await
+}
+
+/// Parse and display AzCopy JSON output with a progress bar for a specific operation
+/// Returns the number of failed transfers
+pub async fn handle_azcopy_output_with_operation<R: AsyncRead + Unpin>(
+    stream: R,
+    operation: AzCopyOperation,
+) -> Result<u32> {
     let reader = BufReader::new(stream);
     let mut lines = reader.lines();
     let mut pb: Option<ProgressBar> = None;
     let mut failed_count: u32 = 0;
     let mut log_file_location: Option<String> = None;
+
+    // Determine the verb to use based on operation
+    let verb_past = match operation {
+        AzCopyOperation::Copy => "transferred",
+        AzCopyOperation::Remove => "removed",
+        AzCopyOperation::Sync => "synced",
+    };
 
     while let Some(line) = lines.next_line().await? {
         // Try to parse as JSON log entry first
@@ -123,10 +147,11 @@ pub async fn handle_azcopy_output<R: AsyncRead + Unpin>(stream: R) -> Result<u32
 
                                 if failed_count > 0 {
                                     println!(
-                                        "{} {} of {} files transferred ({}) - {} failed",
+                                        "{} {} of {} files {} ({}) - {} failed",
                                         "⚠".yellow(),
                                         completed,
                                         total,
+                                        verb_past,
                                         bytes_transferred,
                                         failed
                                     );
@@ -135,9 +160,10 @@ pub async fn handle_azcopy_output<R: AsyncRead + Unpin>(stream: R) -> Result<u32
                                     }
                                 } else {
                                     println!(
-                                        "{} {} files transferred ({})",
+                                        "{} {} files {} ({})",
                                         "✓".green(),
                                         completed,
+                                        verb_past,
                                         bytes_transferred
                                     );
                                 }
