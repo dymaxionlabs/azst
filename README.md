@@ -13,6 +13,7 @@ backend for blazing-fast transfers while providing a clean, intuitive interface.
 - **cp** - Copy files to/from/between Azure storage (including Azure-to-Azure
   server-side copies)
 - **ls** - List objects in Azure storage with detailed information
+- **du** - Display disk usage statistics for storage containers and paths
 - **rm** - Remove objects from Azure storage
 - **Recursive operations** with `-r` flag
 - **Human-readable file sizes** with `-h` flag
@@ -118,7 +119,62 @@ azst rm az://myaccount/mycontainer/file.txt
 
 # Remove all objects with prefix (recursive)
 azst rm -r az://myaccount/mycontainer/prefix/
+
+# Display disk usage statistics
+azst du az://myaccount/mycontainer/
+
+# Display disk usage with human-readable sizes
+azst du -H az://myaccount/mycontainer/prefix/
+
+# Show only total size (summarize)
+azst du -s az://myaccount/mycontainer/
 ```
+
+### Disk Usage (du)
+
+The `du` command displays disk usage statistics for Azure storage or local paths,
+similar to Linux `du` and `gsutil du`:
+
+```bash
+# Show disk usage for entire container
+azst du az://myaccount/mycontainer/
+
+# Show disk usage for specific prefix
+azst du az://myaccount/mycontainer/data/
+
+# Show sizes in human-readable format (KB, MB, GB)
+azst du -H az://myaccount/mycontainer/
+
+# Show only total size
+azst du -s az://myaccount/mycontainer/
+
+# Show detailed breakdown with grand total
+azst du -Hc az://myaccount/mycontainer/
+
+# Calculate usage for all containers in an account
+azst du az://myaccount/
+
+# Calculate usage for local directory
+azst du /local/path/
+
+# Summarize local directory
+azst du -s /local/path/
+```
+
+**Options:**
+- `-s, --summarize`: Display only the total size for each argument
+- `-H, --human-readable`: Show sizes in human-readable format (KB, MB, GB)
+- `-c, --total`: Display grand total at the end
+- `-a, --account <ACCOUNT>`: Specify storage account name
+
+**Output format:**
+```
+SIZE    PATH
+1.5 GB  az://myaccount/mycontainer/data/
+500 MB  az://myaccount/mycontainer/logs/
+2.0 GB  total: az://myaccount/mycontainer/
+```
+
 
 ### Advanced Usage
 
@@ -377,6 +433,7 @@ This project is licensed under the MIT or Apache-2.0 license.
 | `gsutil cp` | `azst cp`      | Copy files          |
 | `gsutil ls` | `azst ls`      | List objects        |
 | `gsutil rm` | `azst rm`      | Remove objects      |
+| `gsutil du` | `azst du`      | Disk usage stats    |
 | `gsutil -m` | `azst cp -j N` | Parallel operations |
 
 The tool aims to provide familiar gsutil-like semantics for Azure Blob Storage

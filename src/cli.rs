@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::{cp, ls, mv, rm, sync};
+use crate::commands::{cp, du, ls, mv, rm, sync};
 
 #[derive(Parser)]
 #[command(name = "azst")]
@@ -41,6 +41,23 @@ pub enum Commands {
         /// Exclude files matching this pattern (supports wildcards like *.log;*.tmp)
         #[arg(long)]
         exclude_pattern: Option<String>,
+    },
+    /// Display disk usage statistics (like gsutil du)
+    Du {
+        /// Path to analyze (az://container/path or local path)
+        path: Option<String>,
+        /// Display only total size for each argument
+        #[arg(short, long)]
+        summarize: bool,
+        /// Show sizes in human readable format (KB, MB, GB)
+        #[arg(short = 'H', long)]
+        human_readable: bool,
+        /// Display grand total
+        #[arg(short = 'c', long)]
+        total: bool,
+        /// Storage account name
+        #[arg(short, long)]
+        account: Option<String>,
     },
     /// List objects in Azure storage (like gsutil ls)
     Ls {
@@ -149,6 +166,22 @@ impl Cli {
                     *put_md5,
                     include_pattern.as_deref(),
                     exclude_pattern.as_deref(),
+                )
+                .await
+            }
+            Commands::Du {
+                path,
+                summarize,
+                human_readable,
+                total,
+                account,
+            } => {
+                du::execute(
+                    path.as_deref(),
+                    *summarize,
+                    *human_readable,
+                    *total,
+                    account.as_deref(),
                 )
                 .await
             }

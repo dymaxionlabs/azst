@@ -401,6 +401,83 @@ mod mv_command_tests {
 }
 
 #[cfg(test)]
+mod du_tests {
+    use super::*;
+
+    #[test]
+    fn test_du_help() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["du", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("disk usage statistics"));
+    }
+
+    #[test]
+    fn test_du_azure_uri_format_in_help() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["du", "--help"]);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("az://"));
+    }
+
+    #[test]
+    fn test_du_local_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        let content = "Hello, world!";
+        fs::write(&test_file, content).unwrap();
+
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["du", test_file.to_str().unwrap()]);
+
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains(content.len().to_string()));
+    }
+
+    #[test]
+    fn test_du_local_file_human_readable() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        let content = "x".repeat(2048); // 2KB
+        fs::write(&test_file, content).unwrap();
+
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["du", "-H", test_file.to_str().unwrap()]);
+
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("KB"));
+    }
+
+    #[test]
+    fn test_du_local_directory() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a simple directory structure
+        fs::write(temp_dir.path().join("file1.txt"), "content1").unwrap();
+        fs::write(temp_dir.path().join("file2.txt"), "content2").unwrap();
+
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["du", "-s", temp_dir.path().to_str().unwrap()]);
+
+        cmd.assert().success();
+    }
+
+    #[test]
+    fn test_du_nonexistent_path() {
+        let mut cmd = Command::cargo_bin("azst").unwrap();
+        cmd.args(&["du", "/nonexistent/path"]);
+
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("does not exist"));
+    }
+}
+
+#[cfg(test)]
 mod utils_integration_tests {
     use super::*;
 

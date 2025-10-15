@@ -27,6 +27,12 @@ pub trait OutputWriter: Send {
 
     /// Write a local file entry
     fn write_local_file(&self, name: &str, size: &str, file_type: &str, long: bool);
+
+    /// Write a disk usage entry
+    fn write_disk_usage(&self, size: &str, path: &str);
+
+    /// Write a disk usage total entry
+    fn write_disk_usage_total(&self, size: &str, path: &str);
 }
 
 /// TTY writer with colors and formatting for human reading
@@ -122,6 +128,18 @@ impl OutputWriter for TtyWriter {
             println!("{}", display_name);
         }
     }
+
+    fn write_disk_usage(&self, size: &str, path: &str) {
+        println!("{}\t{}", size.green(), path.cyan());
+    }
+
+    fn write_disk_usage_total(&self, size: &str, path: &str) {
+        println!(
+            "{}\t{}",
+            size.green().bold(),
+            format!("total: {}", path).bold()
+        );
+    }
 }
 
 /// Plain text writer for piping/scripting (no colors)
@@ -184,6 +202,14 @@ impl OutputWriter for PlainWriter {
         } else {
             println!("{}", name);
         }
+    }
+
+    fn write_disk_usage(&self, size: &str, path: &str) {
+        println!("{}\t{}", size, path);
+    }
+
+    fn write_disk_usage_total(&self, size: &str, path: &str) {
+        println!("{}\ttotal: {}", size, path);
     }
 }
 
