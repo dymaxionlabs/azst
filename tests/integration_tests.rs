@@ -173,7 +173,9 @@ mod ls_command_tests {
 
         cmd.assert()
             .success()
-            .stdout(predicate::str::contains("Size"));
+            // When not outputting to TTY, headers are not shown
+            // Check for the actual file listing instead
+            .stdout(predicate::str::contains("test.txt"));
     }
 
     #[test]
@@ -266,9 +268,12 @@ mod ls_command_tests {
         cmd.args(&["ls", "az://invalid-account-that-does-not-exist/"]);
 
         // Should fail with Azure-related error (not path error)
-        cmd.assert()
-            .failure()
-            .stderr(predicate::str::contains("Azure").or(predicate::str::contains("storage")));
+        // Case-insensitive check for "storage" (can be "Storage" or "storage")
+        cmd.assert().failure().stderr(
+            predicate::str::contains("Azure")
+                .or(predicate::str::contains("storage"))
+                .or(predicate::str::contains("Storage")),
+        );
     }
 }
 
