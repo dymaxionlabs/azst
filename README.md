@@ -4,32 +4,39 @@
 [![Release](https://github.com/dymaxionlabs/azst/actions/workflows/release.yml/badge.svg)](https://github.com/dymaxionlabs/azst/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-CLI tool for Azure Blob Storage with `gsutil`-like semantics. Uses **AzCopy** as
+CLI tool for Azure Blob Storage with POSIX-like semantics. Uses **AzCopy** as
 backend for blazing-fast transfers while providing a clean, intuitive interface.
 
 ## Features
 
-- **🚀 High Performance** - Uses AzCopy backend for maximum transfer speeds
-- **cat** - Concatenate object content to stdout (including byte range support)
-- **cp** - Copy files to/from/between Azure storage (including Azure-to-Azure
-  server-side copies)
-- **ls** - List objects in Azure storage with detailed information
-- **du** - Display disk usage statistics for storage containers and paths
-- **rm** - Remove objects from Azure storage
-- **Recursive operations** with `-r` flag
-- **Human-readable file sizes** with `-h` flag
-- **Parallel transfers** - Configurable with `-j` flag (default: 4 connections)
-- **Clean URI format**: `az://<account>/<container>/path/to/object`
-- **Familiar gsutil syntax** - Easy migration from Google Cloud Storage
+- **🔧 Complete Toolset** - `cat`, `cp`, `ls`, `du`, `mv`, `rm`, and `sync`
+  commands
+- **🎯 Clean URI Syntax** - `az://account/container/path` instead of verbose
+  HTTPS URLs
+- **⚡ High Performance** - AzCopy backend with parallel transfers and
+  server-side copies
+- **🔍 Pattern Matching** - Glob patterns (`*.txt`, `**/*.jpg`) and wildcards
+  for filtering
+- **🔒 Safe Operations** - Dry-run mode, confirmation prompts, and detailed
+  previews
+- **🎨 Better UX** - Colored output, progress indicators, and clear error
+  messages
 
 ## Why azst?
 
-While AzCopy is powerful, it requires verbose HTTPS URLs. **azst** provides:
-- **Cleaner syntax**: `az://account/container/path` instead of
+AzCopy is fast and Azure CLI is comprehensive, but both require learning
+Azure-specific syntax and working with verbose HTTPS URLs.
+
+`azst` offers a simpler alternative:
+- **Familiar commands** - `cp`, `ls`, `rm`, `du` work like their Unix
+  counterparts
+- **Shorter URIs** - `az://account/container/path` vs
   `https://account.blob.core.windows.net/container/path`
-- **gsutil-like commands**: Familiar interface for GCP users
-- **Better UX**: Intuitive error messages and colored output
-- **AzCopy performance**: Fast parallel transfers under the hood
+- **Same speed** - Uses AzCopy under the hood for parallel transfers
+- **No new auth** - Works with your existing `az login` credentials
+
+Ideal for developers who prefer Unix-style tools or are migrating from GCP's
+`gsutil`.
 
 ## Prerequisites
 
@@ -190,7 +197,8 @@ The tool uses the Azure CLI configuration and authentication:
 | `gsutil rsync` | `azst sync` | Sync directories |
 
 The tool aims to provide familiar gsutil-like semantics for Azure Blob Storage
-operations. All copy and sync operations use AzCopy for parallel transfers by default.
+operations. All copy and sync operations use AzCopy for parallel transfers by
+default.
 
 ## Contributing
 
