@@ -4,6 +4,22 @@ use std::path::PathBuf;
 use tokio::process::Command as AsyncCommand;
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Get the Azure CLI command name based on the platform
+pub fn get_az_command() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "az.cmd"
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        "az"
+    }
+}
+
+// ============================================================================
 // AzCopy Configuration
 // ============================================================================
 
@@ -209,7 +225,7 @@ impl AzureClient {
     /// Check if Azure CLI is installed and user is logged in
     pub async fn check_prerequisites(&self) -> Result<()> {
         // Check if az CLI is installed
-        let output = AsyncCommand::new("az")
+        let output = AsyncCommand::new(get_az_command())
             .arg("--version")
             .output()
             .await
@@ -220,7 +236,7 @@ impl AzureClient {
         }
 
         // Check if user is logged in
-        let output = AsyncCommand::new("az")
+        let output = AsyncCommand::new(get_az_command())
             .args(["account", "show"])
             .output()
             .await
@@ -237,7 +253,7 @@ impl AzureClient {
 
     /// List storage accounts in the current resource group or subscription
     pub async fn list_storage_accounts(&self) -> Result<Vec<StorageAccountInfo>> {
-        let mut cmd = AsyncCommand::new("az");
+        let mut cmd = AsyncCommand::new(get_az_command());
         cmd.args(["storage", "account", "list", "--output", "json"]);
 
         let output = cmd
@@ -259,7 +275,7 @@ impl AzureClient {
 
     /// List containers in the storage account
     pub async fn list_containers(&self) -> Result<Vec<ContainerInfo>> {
-        let mut cmd = AsyncCommand::new("az");
+        let mut cmd = AsyncCommand::new(get_az_command());
         cmd.args(["storage", "container", "list", "--output", "json"]);
 
         if let Some(ref account) = self.config.storage_account {
@@ -355,7 +371,7 @@ impl AzureClient {
         delimiter: Option<&str>,
         marker: Option<&str>,
     ) -> Result<(Vec<BlobItem>, Option<String>)> {
-        let mut cmd = AsyncCommand::new("az");
+        let mut cmd = AsyncCommand::new(get_az_command());
         cmd.args([
             "storage",
             "blob",
@@ -617,7 +633,7 @@ impl AzCopyClient {
         }
 
         // Check if user is logged in to Azure (azcopy uses Azure CLI credentials)
-        let output = AsyncCommand::new("az")
+        let output = AsyncCommand::new(get_az_command())
             .args(["account", "show"])
             .output()
             .await

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use colored::*;
 use std::io::Write;
 
-use crate::azure::AzCopyClient;
+use crate::azure::{get_az_command, AzCopyClient};
 use crate::utils::{is_azure_uri, parse_azure_uri};
 
 pub struct CatOptions<'a> {
@@ -79,7 +79,7 @@ async fn download_to_stdout(display_url: &str) -> Result<()> {
     let temp_file = format!("/tmp/azst_cat_{}", std::process::id());
 
     // Use az storage blob download with a temporary file
-    let mut cmd = Command::new("az");
+    let mut cmd = Command::new(get_az_command());
     cmd.args([
         "storage",
         "blob",
@@ -187,7 +187,7 @@ async fn download_with_range(display_url: &str, range: Option<&str>) -> Result<(
     // Create a temporary file for downloading
     let temp_file = format!("/tmp/azst_cat_range_{}", std::process::id());
 
-    let mut cmd = Command::new("az");
+    let mut cmd = Command::new(get_az_command());
     cmd.args([
         "storage",
         "blob",
