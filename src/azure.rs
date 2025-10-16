@@ -532,13 +532,22 @@ pub fn get_bundled_azcopy_path() -> Result<PathBuf> {
             .map(PathBuf::from)
             .or_else(dirs::data_local_dir)
             .ok_or_else(|| anyhow!("Could not determine local app data directory"))?;
-        Ok(local_app_data.join("Programs").join("azst").join("azcopy").join("azcopy.exe"))
+        Ok(local_app_data
+            .join("Programs")
+            .join("azst")
+            .join("azcopy")
+            .join("azcopy.exe"))
     }
     #[cfg(not(target_os = "windows"))]
     {
         // On Unix-like systems, use ~/.local/share/azst/azcopy/azcopy
         let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
-        Ok(home.join(".local").join("share").join("azst").join("azcopy").join("azcopy"))
+        Ok(home
+            .join(".local")
+            .join("share")
+            .join("azst")
+            .join("azcopy")
+            .join("azcopy"))
     }
 }
 
