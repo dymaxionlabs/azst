@@ -529,8 +529,8 @@ pub fn get_bundled_azcopy_path() -> Result<PathBuf> {
         // On Windows, use %LOCALAPPDATA%\Programs\azst\azcopy\azcopy.exe
         let local_app_data = std::env::var("LOCALAPPDATA")
             .ok()
-            .and_then(|path| Some(PathBuf::from(path)))
-            .or_else(|| dirs::data_local_dir())
+            .map(PathBuf::from)
+            .or_else(dirs::data_local_dir)
             .ok_or_else(|| anyhow!("Could not determine local app data directory"))?;
         Ok(local_app_data.join("Programs").join("azst").join("azcopy").join("azcopy.exe"))
     }

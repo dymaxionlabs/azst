@@ -55,7 +55,7 @@ mod cat_command_tests {
     #[test]
     fn test_cat_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cat", "--help"]);
+        cmd.args(["cat", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("Concatenate object content"));
@@ -73,7 +73,7 @@ mod cat_command_tests {
     #[test]
     fn test_cat_invalid_url() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cat", "invalid-url"]);
+        cmd.args(["cat", "invalid-url"]);
         cmd.assert()
             .failure()
             .stderr(predicate::str::contains("Invalid URL"));
@@ -82,7 +82,7 @@ mod cat_command_tests {
     #[test]
     fn test_cat_header_flag() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cat", "--header", "--help"]);
+        cmd.args(["cat", "--header", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("header"));
@@ -91,7 +91,7 @@ mod cat_command_tests {
     #[test]
     fn test_cat_range_flag() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cat", "--range", "0-100", "--help"]);
+        cmd.args(["cat", "--range", "0-100", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("range"));
@@ -114,7 +114,7 @@ mod cp_command_tests {
     #[test]
     fn test_cp_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cp", "--help"]);
+        cmd.args(["cp", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("Copy files"));
@@ -130,7 +130,7 @@ mod cp_command_tests {
         fs::write(&source_file, "test content").unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&[
+        cmd.args([
             "cp",
             source_file.to_str().unwrap(),
             dest_file.to_str().unwrap(),
@@ -147,7 +147,7 @@ mod cp_command_tests {
     #[test]
     fn test_cp_recursive_flag() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cp", "-r", "--help"]);
+        cmd.args(["cp", "-r", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("recursive"));
@@ -159,7 +159,7 @@ mod cp_command_tests {
         let dest_file = temp_dir.path().join("dest.txt");
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cp", "/nonexistent/file.txt", dest_file.to_str().unwrap()]);
+        cmd.args(["cp", "/nonexistent/file.txt", dest_file.to_str().unwrap()]);
 
         cmd.assert()
             .failure()
@@ -176,7 +176,7 @@ mod ls_command_tests {
     #[test]
     fn test_ls_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", "--help"]);
+        cmd.args(["ls", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("List objects"));
@@ -191,7 +191,7 @@ mod ls_command_tests {
         fs::write(temp_dir.path().join("file2.txt"), "content2").unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", temp_dir.path().to_str().unwrap()]);
+        cmd.args(["ls", temp_dir.path().to_str().unwrap()]);
 
         cmd.assert()
             .success()
@@ -206,7 +206,7 @@ mod ls_command_tests {
         fs::write(&test_file, "content").unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", test_file.to_str().unwrap()]);
+        cmd.args(["ls", test_file.to_str().unwrap()]);
 
         cmd.assert()
             .success()
@@ -219,7 +219,7 @@ mod ls_command_tests {
         fs::write(temp_dir.path().join("test.txt"), "content").unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", "-l", temp_dir.path().to_str().unwrap()]);
+        cmd.args(["ls", "-l", temp_dir.path().to_str().unwrap()]);
 
         cmd.assert()
             .success()
@@ -234,7 +234,7 @@ mod ls_command_tests {
         fs::write(temp_dir.path().join("test.txt"), "x".repeat(2048)).unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", "-lH", temp_dir.path().to_str().unwrap()]);
+        cmd.args(["ls", "-lH", temp_dir.path().to_str().unwrap()]);
 
         cmd.assert()
             .success()
@@ -244,7 +244,7 @@ mod ls_command_tests {
     #[test]
     fn test_ls_nonexistent_path() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", "/nonexistent/path"]);
+        cmd.args(["ls", "/nonexistent/path"]);
 
         cmd.assert()
             .failure()
@@ -280,7 +280,7 @@ mod ls_command_tests {
         // Test: azst ls -l
         // Expected: List storage accounts with location and resource group
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", "-l"]);
+        cmd.args(["ls", "-l"]);
 
         let result = cmd.assert();
 
@@ -297,7 +297,7 @@ mod ls_command_tests {
         // Test: azst ls az://accountname/
         // Expected: List all containers in the specified storage account
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", "az://testaccount/"]);
+        cmd.args(["ls", "az://testaccount/"]);
 
         // This will fail with an error if the account doesn't exist or user isn't authenticated
         // When successful, it should list containers
@@ -315,7 +315,7 @@ mod ls_command_tests {
         // Test that Azure URI format is recognized correctly
         // This test doesn't require Azure CLI as it tests parsing only
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", "az://invalid-account-that-does-not-exist/"]);
+        cmd.args(["ls", "az://invalid-account-that-does-not-exist/"]);
 
         // Should fail with Azure-related error (not path error)
         // Case-insensitive check for "storage" (can be "Storage" or "storage")
@@ -334,7 +334,7 @@ mod rm_command_tests {
     #[test]
     fn test_rm_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["rm", "--help"]);
+        cmd.args(["rm", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("Remove objects"));
@@ -352,7 +352,7 @@ mod rm_command_tests {
     #[test]
     fn test_rm_recursive_flag() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["rm", "-r", "--help"]);
+        cmd.args(["rm", "-r", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("recursive"));
@@ -361,7 +361,7 @@ mod rm_command_tests {
     #[test]
     fn test_rm_force_flag() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["rm", "-f", "--help"]);
+        cmd.args(["rm", "-f", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("force"));
@@ -370,7 +370,7 @@ mod rm_command_tests {
     #[test]
     fn test_rm_nonexistent_file() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["rm", "-f", "/nonexistent/file.txt"]);
+        cmd.args(["rm", "-f", "/nonexistent/file.txt"]);
 
         cmd.assert()
             .failure()
@@ -385,7 +385,7 @@ mod mv_command_tests {
     #[test]
     fn test_mv_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["mv", "--help"]);
+        cmd.args(["mv", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("Move files"));
@@ -403,7 +403,7 @@ mod mv_command_tests {
     #[test]
     fn test_mv_recursive_flag() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["mv", "-r", "--help"]);
+        cmd.args(["mv", "-r", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("recursive"));
@@ -412,7 +412,7 @@ mod mv_command_tests {
     #[test]
     fn test_mv_force_flag() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["mv", "-f", "--help"]);
+        cmd.args(["mv", "-f", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("force"));
@@ -429,7 +429,7 @@ mod mv_command_tests {
         fs::write(&source_file, "test content").unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&[
+        cmd.args([
             "mv",
             source_file.to_str().unwrap(),
             dest_file.to_str().unwrap(),
@@ -443,7 +443,7 @@ mod mv_command_tests {
     #[test]
     fn test_mv_azure_uri_format_in_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["mv", "--help"]);
+        cmd.args(["mv", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("az://"));
@@ -457,7 +457,7 @@ mod du_tests {
     #[test]
     fn test_du_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["du", "--help"]);
+        cmd.args(["du", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("disk usage statistics"));
@@ -466,7 +466,7 @@ mod du_tests {
     #[test]
     fn test_du_azure_uri_format_in_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["du", "--help"]);
+        cmd.args(["du", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("az://"));
@@ -480,7 +480,7 @@ mod du_tests {
         fs::write(&test_file, content).unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["du", test_file.to_str().unwrap()]);
+        cmd.args(["du", test_file.to_str().unwrap()]);
 
         cmd.assert()
             .success()
@@ -495,7 +495,7 @@ mod du_tests {
         fs::write(&test_file, content).unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["du", "-H", test_file.to_str().unwrap()]);
+        cmd.args(["du", "-H", test_file.to_str().unwrap()]);
 
         cmd.assert()
             .success()
@@ -511,7 +511,7 @@ mod du_tests {
         fs::write(temp_dir.path().join("file2.txt"), "content2").unwrap();
 
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["du", "-s", temp_dir.path().to_str().unwrap()]);
+        cmd.args(["du", "-s", temp_dir.path().to_str().unwrap()]);
 
         cmd.assert().success();
     }
@@ -519,7 +519,7 @@ mod du_tests {
     #[test]
     fn test_du_nonexistent_path() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["du", "/nonexistent/path"]);
+        cmd.args(["du", "/nonexistent/path"]);
 
         cmd.assert()
             .failure()
@@ -535,7 +535,7 @@ mod utils_integration_tests {
     fn test_uri_validation_in_commands() {
         // Test that invalid URIs result in file not found error
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["ls", "invalid://uri"]);
+        cmd.args(["ls", "invalid://uri"]);
         cmd.assert()
             .failure()
             .stderr(predicate::str::contains("does not exist"));
@@ -544,7 +544,7 @@ mod utils_integration_tests {
     #[test]
     fn test_azure_uri_format_in_help() {
         let mut cmd = Command::cargo_bin("azst").unwrap();
-        cmd.args(&["cp", "--help"]);
+        cmd.args(["cp", "--help"]);
         cmd.assert()
             .success()
             .stdout(predicate::str::contains("az://"));
