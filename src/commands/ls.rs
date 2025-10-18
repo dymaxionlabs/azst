@@ -32,19 +32,19 @@ pub async fn execute(
                 azure_client = azure_client.with_storage_account(account_name);
             }
             azure_client.check_prerequisites().await?;
-            list_azure_objects(p, long, human_readable, recursive, &azure_client).await
+            list_azure_objects(p, long, human_readable, recursive, &mut azure_client).await
         }
         Some(p) => list_local_path(p, long, human_readable, recursive).await,
         None => {
             // List all storage accounts - requires Azure
-            let azure_client = AzureClient::new();
+            let mut azure_client = AzureClient::new();
             azure_client.check_prerequisites().await?;
-            list_storage_accounts(long, &azure_client).await
+            list_storage_accounts(long, &mut azure_client).await
         }
     }
 }
 
-async fn list_storage_accounts(long: bool, azure_client: &AzureClient) -> Result<()> {
+async fn list_storage_accounts(long: bool, azure_client: &mut AzureClient) -> Result<()> {
     let accounts = azure_client.list_storage_accounts().await?;
 
     if accounts.is_empty() {
@@ -67,7 +67,7 @@ async fn list_storage_accounts(long: bool, azure_client: &AzureClient) -> Result
     Ok(())
 }
 
-async fn list_containers(long: bool, azure_client: &AzureClient) -> Result<()> {
+async fn list_containers(long: bool, azure_client: &mut AzureClient) -> Result<()> {
     let containers = azure_client.list_containers().await?;
 
     if containers.is_empty() {
@@ -97,7 +97,7 @@ async fn list_containers(long: bool, azure_client: &AzureClient) -> Result<()> {
 
 /// Stream blob results directly without buffering - for non-wildcard listings
 async fn list_blobs_streaming(
-    client: &AzureClient,
+    client: &mut AzureClient,
     container: &str,
     actual_account: &str,
     prefix: Option<&str>,
@@ -170,12 +170,12 @@ async fn list_azure_objects(
     long: bool,
     human_readable: bool,
     recursive: bool,
-    azure_client: &AzureClient,
+    azure_client: &mut AzureClient,
 ) -> Result<()> {
     let (account, container, prefix) = parse_azure_uri(path)?;
 
     // Create azure client with account if specified in URI
-    let client = if let Some(account_name) = account.clone() {
+    let mut client = if let Some(account_name) = account.clone() {
         AzureClient::new().with_storage_account(&account_name)
     } else {
         azure_client.clone()
@@ -184,7 +184,7 @@ async fn list_azure_objects(
     // Special case: If we have an account but no container (az://account or az://account/),
     // list all containers in that account
     if account.is_some() && container.is_empty() {
-        return list_containers(long, &client).await;
+        return list_containers(long, &mut client).await;
     }
 
     //Check if the prefix contains wildcards
@@ -230,14 +230,15 @@ async fn list_azure_objects(
     // Get the actual account name being used
     let actual_account = client
         .get_storage_account()
-        .ok_or_else(|| anyhow!("Storage account not configured"))?;
+        .ok_or_else(|| anyhow!("Storage account not configured"))?
+        .to_string();
 
     // If there's no pattern, we can stream results directly without buffering
     if pattern.is_none() {
         return list_blobs_streaming(
-            &client,
+            &mut client,
             &container,
-            actual_account,
+            &actual_account,
             list_prefix.as_deref(),
             delimiter,
             long,
