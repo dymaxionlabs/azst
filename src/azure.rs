@@ -10,6 +10,22 @@ use azure_storage_blobs::prelude::*;
 use futures::StreamExt;
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Get the Azure CLI command name based on the platform
+pub fn get_az_command() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "az.cmd"
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        "az"
+    }
+}
+
+// ============================================================================
 // AzCopy Configuration
 // ============================================================================
 
@@ -498,17 +514,30 @@ pub fn convert_az_uri_to_url(az_uri: &str) -> Result<String> {
 
 /// Get the path where bundled AzCopy should be installed
 pub fn get_bundled_azcopy_path() -> Result<PathBuf> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
-    let azcopy_dir = home.join(".local/share/azst/azcopy");
-
-    // On Windows, use azcopy.exe, otherwise use azcopy
     #[cfg(target_os = "windows")]
     {
-        Ok(azcopy_dir.join("azcopy.exe"))
+        // On Windows, use %LOCALAPPDATA%\Programs\azst\azcopy\azcopy.exe
+        let local_app_data = std::env::var("LOCALAPPDATA")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(dirs::data_local_dir)
+            .ok_or_else(|| anyhow!("Could not determine local app data directory"))?;
+        Ok(local_app_data
+            .join("Programs")
+            .join("azst")
+            .join("azcopy")
+            .join("azcopy.exe"))
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Ok(azcopy_dir.join("azcopy"))
+        // On Unix-like systems, use ~/.local/share/azst/azcopy/azcopy
+        let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
+        Ok(home
+            .join(".local")
+            .join("share")
+            .join("azst")
+            .join("azcopy")
+            .join("azcopy"))
     }
 }
 
@@ -607,7 +636,7 @@ impl AzCopyClient {
         }
 
         // Check if user is logged in to Azure (azcopy uses Azure CLI credentials)
-        let output = AsyncCommand::new("az")
+        let output = AsyncCommand::new(get_az_command())
             .args(["account", "show"])
             .output()
             .await
