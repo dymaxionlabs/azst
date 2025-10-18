@@ -353,7 +353,7 @@ impl AzureClient {
         &mut self,
         container: &str,
         prefix: Option<&str>,
-        _delimiter: Option<&str>,
+        delimiter: Option<&str>,
         mut callback: F,
     ) -> Result<()>
     where
@@ -369,8 +369,12 @@ impl AzureClient {
             list_builder = list_builder.prefix(prefix_val.to_string());
         }
 
-        // Note: The Azure SDK uses delimiter differently than the CLI
-        // For hierarchical listing (delimiter), we need to use include_metadata
+        // Set delimiter for hierarchical listing (non-recursive)
+        // When delimiter is set (e.g., "/"), the API returns only immediate children
+        // and uses BlobPrefix items for "subdirectories"
+        if let Some(delimiter_val) = delimiter {
+            list_builder = list_builder.delimiter(delimiter_val.to_string());
+        }
 
         let mut stream = list_builder.into_stream();
 

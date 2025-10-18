@@ -7,6 +7,8 @@ use crate::utils::{
     split_wildcard_path,
 };
 
+use std::io::IsTerminal;
+
 /// Calculate the depth of a pattern (number of path segments)
 /// Treats ** as matching any depth
 fn pattern_depth(pattern: &str) -> Option<usize> {
@@ -106,14 +108,16 @@ async fn list_blobs_streaming(
     human_readable: bool,
 ) -> Result<()> {
     let writer = create_writer();
-    writer.write_header(&format!(
-        "Contents of az://{}/{}:",
-        actual_account, container
-    ));
-
-    if long {
-        writer.write_table_header(&[("Size", 10), ("Type", 15), ("Modified", 20), ("Name", 0)]);
-        writer.write_separator(80);
+    let is_tty = std::io::stdout().is_terminal();
+    if is_tty {
+        writer.write_header(&format!(
+            "Contents of az://{}/{}:",
+            actual_account, container
+        ));
+        if long {
+            writer.write_table_header(&[("Size", 10), ("Type", 15), ("Modified", 20), ("Name", 0)]);
+            writer.write_separator(80);
+        }
     }
 
     let mut item_count = 0;
