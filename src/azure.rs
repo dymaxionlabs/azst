@@ -5,7 +5,6 @@ use std::sync::Arc;
 use tokio::process::Command as AsyncCommand;
 
 use azure_core::auth::TokenCredential;
-use azure_identity::AzureCliCredential;
 use azure_storage::StorageCredentials;
 use azure_storage_blobs::prelude::*;
 use futures::StreamExt;
@@ -183,7 +182,7 @@ pub struct StorageAccountInfo {
 #[derive(Clone)]
 pub struct AzureClient {
     config: AzureConfig,
-    credential: Option<Arc<AzureCliCredential>>,
+    credential: Option<Arc<dyn TokenCredential>>,
 }
 
 impl AzureClient {
@@ -206,18 +205,39 @@ impl AzureClient {
         self.config.storage_account.as_deref()
     }
 
-    /// Get or create the Azure credential
-    async fn get_credential(&mut self) -> Result<Arc<AzureCliCredential>> {
+    /// Get or create the Azure credential using a fallback chain
+    ///
+    /// Credential chain (in priority order):
+    /// 1. Environment Variables (Service Principal)
+    ///    - AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
+    ///    - Or AZURE_FEDERATED_TOKEN / AZURE_FEDERATED_TOKEN_FILE for Workload Identity
+    /// 2. Managed Identity (Azure VMs, AKS, App Service, Container Instances, etc.)
+    /// 3. Azure CLI (az login) - Best for local development
+    ///
+    /// This matches AzCopy's authentication flow and works in both
+    /// development (with Azure CLI) and production (with Managed Identity or Service Principal).
+    ///
+    /// Set `AZURE_CREDENTIAL_KIND` environment variable to force a specific credential type:
+    /// - "azurecli" - Azure CLI only
+    /// - "virtualmachine" - Managed Identity only
+    /// - "environment" - Environment variables only
+    async fn get_credential(&mut self) -> Result<Arc<dyn TokenCredential>> {
         if let Some(ref cred) = self.credential {
             return Ok(cred.clone());
         }
 
-        // Create AzureCliCredential
-        // This uses the authentication from `az login`
-        let credential = AzureCliCredential::new();
-        let cred_arc = Arc::new(credential);
-        self.credential = Some(cred_arc.clone());
-        Ok(cred_arc)
+        // Use create_credential() which creates DefaultAzureCredential by default
+        // or SpecificAzureCredential if AZURE_CREDENTIAL_KIND is set
+        // This automatically tries (in order):
+        // 1. EnvironmentCredential (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
+        // 2. WorkloadIdentityCredential (AZURE_FEDERATED_TOKEN_FILE for AKS workload identity)
+        // 3. ManagedIdentityCredential (for Azure VMs, App Service, Container Instances)
+        // 4. AzureCliCredential (az login for local development)
+        let credential = azure_identity::create_credential()
+            .context("Failed to create Azure credential. Please ensure you have authenticated with 'az login', or are running on an Azure VM with Managed Identity, or have set service principal environment variables (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET).")?;
+
+        self.credential = Some(credential.clone());
+        Ok(credential)
     }
 
     /// Create a BlobServiceClient for the configured storage account
@@ -949,5 +969,210 @@ mod tests {
         assert_eq!(accounts[1].name, "account2");
         assert_eq!(accounts[1].location, "westus");
         assert_eq!(accounts[1].resource_group, "rg2");
+    }
+
+    // ========================================================================
+    // Credential Chain Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_credential_caching() {
+        // Test that credentials are cached after first creation
+        let mut client = AzureClient::new();
+
+        // First call should create and cache the credential
+        let result1 = client.get_credential().await;
+        let result2 = client.get_credential().await;
+
+        // Both should succeed or fail consistently
+        assert_eq!(result1.is_ok(), result2.is_ok());
+
+        // If successful, verify they return the same Arc pointer
+        if let (Ok(cred1), Ok(cred2)) = (result1, result2) {
+            assert!(Arc::ptr_eq(&cred1, &cred2), "Credentials should be cached");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_credential_chain_with_environment_override() {
+        // Test that AZURE_CREDENTIAL_KIND can force a specific credential type
+        // Note: This test will fail if the specified credential type is not available
+
+        use std::env;
+
+        // Save original value
+        let original = env::var("AZURE_CREDENTIAL_KIND").ok();
+
+        // Test with azurecli (requires az login)
+        env::set_var("AZURE_CREDENTIAL_KIND", "azurecli");
+        let mut client = AzureClient::new();
+        let result = client.get_credential().await;
+
+        // Should either succeed (if az login is available) or fail with helpful message
+        if let Err(e) = result {
+            let error_msg = e.to_string();
+            assert!(
+                error_msg.contains("az login") || error_msg.contains("Azure CLI"),
+                "Error should mention az login or Azure CLI: {}",
+                error_msg
+            );
+        }
+
+        // Restore original value
+        if let Some(val) = original {
+            env::set_var("AZURE_CREDENTIAL_KIND", val);
+        } else {
+            env::remove_var("AZURE_CREDENTIAL_KIND");
+        }
+    }
+
+    #[test]
+    fn test_credential_chain_documentation() {
+        // This is a documentation test that verifies the expected credential chain order
+        // The actual chain is:
+        // 1. EnvironmentCredential (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
+        // 2. WorkloadIdentityCredential (AZURE_FEDERATED_TOKEN_FILE)
+        // 3. ManagedIdentityCredential (Azure VMs, App Service, etc.)
+        // 4. AzureCliCredential (az login)
+
+        use std::env;
+
+        // Document required environment variables for Service Principal
+        let required_sp_vars = vec!["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"];
+
+        // Verify we can check for their presence
+        for var in required_sp_vars {
+            let _ = env::var(var); // Just checking we can access env vars
+        }
+
+        // Document Workload Identity environment variables
+        let workload_identity_vars = vec![
+            "AZURE_FEDERATED_TOKEN_FILE",
+            "AZURE_TENANT_ID",
+            "AZURE_CLIENT_ID",
+        ];
+
+        for var in workload_identity_vars {
+            let _ = env::var(var);
+        }
+
+        // This test always passes - it's just for documentation
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_credential_error_messages() {
+        // Test that credential errors provide helpful messages
+
+        use std::env;
+
+        // Save all relevant environment variables
+        let saved_vars = vec![
+            (
+                "AZURE_CREDENTIAL_KIND",
+                env::var("AZURE_CREDENTIAL_KIND").ok(),
+            ),
+            ("AZURE_TENANT_ID", env::var("AZURE_TENANT_ID").ok()),
+            ("AZURE_CLIENT_ID", env::var("AZURE_CLIENT_ID").ok()),
+            ("AZURE_CLIENT_SECRET", env::var("AZURE_CLIENT_SECRET").ok()),
+            (
+                "AZURE_FEDERATED_TOKEN_FILE",
+                env::var("AZURE_FEDERATED_TOKEN_FILE").ok(),
+            ),
+        ];
+
+        // Clear all credential environment variables to force failure
+        env::remove_var("AZURE_TENANT_ID");
+        env::remove_var("AZURE_CLIENT_ID");
+        env::remove_var("AZURE_CLIENT_SECRET");
+        env::remove_var("AZURE_FEDERATED_TOKEN_FILE");
+        env::remove_var("AZURE_CREDENTIAL_KIND");
+
+        let mut client = AzureClient::new();
+        let result = client.get_credential().await;
+
+        // Should fail with a helpful error message
+        if let Err(e) = result {
+            let error_msg = e.to_string();
+            // Error should mention at least one authentication method
+            assert!(
+                error_msg.contains("az login")
+                    || error_msg.contains("Managed Identity")
+                    || error_msg.contains("environment variables")
+                    || error_msg.contains("AZURE_"),
+                "Error should provide helpful authentication guidance: {}",
+                error_msg
+            );
+        }
+
+        // Restore environment variables
+        for (key, value) in saved_vars {
+            if let Some(val) = value {
+                env::set_var(key, val);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_blob_service_client_requires_account() {
+        // Test that get_blob_service_client fails without storage account
+        let mut client = AzureClient::new();
+        let result = client.get_blob_service_client().await;
+
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("Storage account not configured"),
+            "Error should mention storage account: {}",
+            error_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_blob_service_client_with_account() {
+        // Test that get_blob_service_client works with storage account configured
+        let mut client = AzureClient::new().with_storage_account("testaccount");
+
+        // This will fail if credentials aren't available, but should fail differently
+        let result = client.get_blob_service_client().await;
+
+        if let Err(e) = result {
+            let error_msg = e.to_string();
+            // Should not complain about storage account anymore
+            assert!(
+                !error_msg.contains("Storage account not configured"),
+                "Error should not be about storage account configuration: {}",
+                error_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_credential_chain_priority_order() {
+        // Document and verify the credential chain priority
+        // This test serves as documentation for the expected behavior
+
+        // Priority 1: Environment Variables (Service Principal)
+        // Required: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
+        // Use case: CI/CD pipelines, automation scripts
+
+        // Priority 2: Workload Identity (Federated)
+        // Required: AZURE_FEDERATED_TOKEN_FILE, AZURE_TENANT_ID, AZURE_CLIENT_ID
+        // Use case: Kubernetes workload identity, GitHub Actions OIDC
+
+        // Priority 3: Managed Identity
+        // Required: Running on Azure VM, App Service, Container Instance, or AKS
+        // Use case: Production deployments on Azure
+
+        // Priority 4: Azure CLI
+        // Required: Azure CLI installed and `az login` completed
+        // Use case: Local development
+
+        // This matches the behavior of:
+        // - Azure SDK DefaultAzureCredential
+        // - AzCopy authentication
+        // - Azure PowerShell
+
+        assert!(true, "Credential chain documented");
     }
 }

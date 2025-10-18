@@ -40,12 +40,25 @@ Ideal for developers who prefer Unix-style tools or are migrating from GCP's
 
 ## Prerequisites
 
-1. **Azure CLI**: Install from
-   [https://docs.microsoft.com/en-us/cli/azure/install-azure-cli](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
-2. **Authentication**: Run `az login` to authenticate with Azure
+### For Local Development
+- **Azure CLI**: Install from [https://docs.microsoft.com/en-us/cli/azure/install-azure-cli](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
+- **Authentication**: Run `az login` to authenticate
 
-**Note**: AzCopy will be automatically downloaded and installed during the
-installation process.
+### For Production / Azure VMs
+No additional prerequisites! `azst` automatically detects:
+- **Managed Identity** on Azure VMs, App Service, AKS, Container Instances
+- **Service Principal** credentials via environment variables:
+  - `AZURE_TENANT_ID`
+  - `AZURE_CLIENT_ID`
+  - `AZURE_CLIENT_SECRET`
+
+### Credential Chain
+`azst` tries authentication methods in this order:
+1. **Environment Variables** - Service Principal (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
+2. **Managed Identity** - Automatic on Azure VMs and services
+3. **Azure CLI** - Uses `az login` credentials for local development
+
+**Note**: AzCopy will be automatically downloaded and installed during first use.
 
 ## Installation
 
@@ -177,6 +190,33 @@ The tool uses the Azure CLI configuration and authentication:
 
 1. Login: `az login`
 2. Set default subscription: `az account set --subscription <subscription-id>`
+
+## Architecture
+
+`azst` uses a hybrid approach for optimal performance and flexibility:
+
+### Authentication
+Uses Azure SDK's credential chain (similar to AzCopy):
+- **Local Development**: Automatically uses `az login` credentials
+- **Azure VMs/Services**: Automatically uses Managed Identity
+- **CI/CD Pipelines**: Uses Service Principal from environment variables
+
+No code changes needed when deploying to Azure! Set `AZURE_CREDENTIAL_KIND` 
+environment variable to force a specific credential type:
+- `azurecli` - Azure CLI only
+- `virtualmachine` - Managed Identity only
+- `environment` - Environment variables only
+
+### Operations
+**Read Operations** (`ls`, `cat`, `du`):
+- Uses the **Azure SDK for Rust** for direct API calls
+- No subprocess overhead, better performance
+- Streaming support for efficient memory usage
+
+**Write Operations** (`cp`, `sync`, `mv`, `rm`):
+- Uses **AzCopy** for maximum throughput
+- Parallel transfers and server-side copies
+- Battle-tested for production workloads
 
 ## Performance
 
