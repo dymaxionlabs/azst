@@ -10,22 +10,6 @@ use azure_storage_blobs::prelude::*;
 use futures::StreamExt;
 
 // ============================================================================
-// Helper Functions
-// ============================================================================
-
-/// Get the Azure CLI command name based on the platform
-pub fn get_az_command() -> &'static str {
-    #[cfg(target_os = "windows")]
-    {
-        "az.cmd"
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        "az"
-    }
-}
-
-// ============================================================================
 // AzCopy Configuration
 // ============================================================================
 
@@ -289,30 +273,88 @@ impl AzureClient {
         Ok(())
     }
 
-    /// List storage accounts in the current resource group or subscription
-    /// NOTE: This still uses Azure CLI as the management plane SDK requires different setup
-    /// TODO: Migrate to azure_mgmt_storage once we have subscription ID handling
-    pub async fn list_storage_accounts(&mut self) -> Result<Vec<StorageAccountInfo>> {
-        // For now, keep using Azure CLI for management operations
-        // The data plane operations (containers, blobs) will use the SDK
-        let mut cmd = AsyncCommand::new("az");
-        cmd.args(["storage", "account", "list", "--output", "json"]);
-
-        let output = cmd
-            .output()
-            .await
-            .context("Failed to execute az storage account list")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Azure CLI error: {}", stderr));
+    /// Get the current subscription ID
+    /// First tries the AZURE_SUBSCRIPTION_ID environment variable,
+    /// then falls back to using Azure CLI to get the default subscription
+    async fn get_subscription_id(&mut self) -> Result<String> {
+        // Try environment variable first
+        if let Ok(sub_id) = std::env::var("AZURE_SUBSCRIPTION_ID") {
+            return Ok(sub_id);
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let accounts: Vec<StorageAccountInfo> =
-            serde_json::from_str(&stdout).context("Failed to parse storage account list JSON")?;
+        // Fall back to using Azure CLI to get the current subscription
+        let output = AsyncCommand::new("az")
+            .args(["account", "show", "--query", "id", "-o", "tsv"])
+            .output()
+            .await
+            .context(
+                "Failed to run 'az account show'. Please ensure you are logged in with 'az login'.",
+            )?;
 
-        Ok(accounts)
+        if !output.status.success() {
+            return Err(anyhow!(
+                "Failed to get subscription ID from Azure CLI. Please ensure you are logged in with 'az login' and have at least one subscription selected."
+            ));
+        }
+
+        let subscription_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        if subscription_id.is_empty() {
+            return Err(anyhow!(
+                "No Azure subscription ID returned from 'az account show'. Please ensure you have a subscription selected with 'az account set'."
+            ));
+        }
+
+        Ok(subscription_id)
+    }
+
+    /// List storage accounts in the current subscription
+    /// Uses Azure Management SDK to query storage accounts
+    ///
+    /// Automatically detects subscription ID from:
+    /// 1. AZURE_SUBSCRIPTION_ID environment variable (if set)
+    /// 2. Azure CLI default subscription (via `az account show`)
+    pub async fn list_storage_accounts(&mut self) -> Result<Vec<StorageAccountInfo>> {
+        let credential = self.get_credential().await?;
+
+        // Get subscription ID (with automatic fallback)
+        let subscription_id = self.get_subscription_id().await?;
+
+        // Create management client using ClientBuilder
+        let client = azure_mgmt_storage::Client::builder(credential).build()?;
+
+        let mut all_accounts = Vec::new();
+
+        // List all storage accounts in the subscription using streaming API
+        let mut stream = client
+            .storage_accounts_client()
+            .list(subscription_id)
+            .into_stream();
+
+        while let Some(response_result) = stream.next().await {
+            let response = response_result.context("Failed to list storage accounts")?;
+
+            // Extract storage accounts from the response
+            for account in response.value {
+                // Extract resource group from the account ID
+                // ID format: /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}
+                let resource_group = account
+                    .tracked_resource
+                    .resource
+                    .id
+                    .as_ref()
+                    .and_then(|id| id.split('/').nth(4).map(|s| s.to_string()))
+                    .unwrap_or_default();
+
+                all_accounts.push(StorageAccountInfo {
+                    name: account.tracked_resource.resource.name.unwrap_or_default(),
+                    location: account.tracked_resource.location,
+                    resource_group,
+                });
+            }
+        }
+
+        Ok(all_accounts)
     }
 
     /// List containers in the storage account using Azure SDK
@@ -635,18 +677,11 @@ impl AzCopyClient {
             }
         }
 
-        // Check if user is logged in to Azure (azcopy uses Azure CLI credentials)
-        let output = AsyncCommand::new(get_az_command())
-            .args(["account", "show"])
-            .output()
-            .await
-            .context("Failed to check Azure login status")?;
-
-        if !output.status.success() {
-            return Err(anyhow!(
-                "Not logged in to Azure. Please run 'az login' first. AzCopy uses Azure CLI credentials."
-            ));
-        }
+        // Note: AzCopy will automatically detect Azure credentials via the credential chain:
+        // 1. Environment variables (Service Principal)
+        // 2. Managed Identity (Azure VMs/services)
+        // 3. Azure CLI (az login)
+        // If credentials are not available, AzCopy will fail with its own error message.
 
         Ok(())
     }
