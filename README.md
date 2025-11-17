@@ -9,23 +9,23 @@ backend for blazing-fast transfers while providing a clean, intuitive interface.
 
 ## Features
 
-- **🔧 Complete Toolset** - `cat`, `cp`, `ls`, `du`, `mv`, `rm`, and `sync`
+- **Complete Toolset** - `cat`, `cp`, `ls`, `du`, `mv`, `rm`, and `sync`
   commands
-- **🎯 Clean URI Syntax** - `az://account/container/path` instead of verbose
+- **Clean URI Syntax** - `az://account/container/path` instead of verbose
   HTTPS URLs
-- **⚡ High Performance** - AzCopy backend with parallel transfers and
+- **High Performance** - AzCopy backend with parallel transfers and
   server-side copies
-- **🔍 Pattern Matching** - Glob patterns (`*.txt`, `**/*.jpg`) and wildcards
+- **Pattern Matching** - Glob patterns (`*.txt`, `**/*.jpg`) and wildcards
   for filtering
-- **🔒 Safe Operations** - Dry-run mode, confirmation prompts, and detailed
+- **Safe Operations** - Dry-run mode, confirmation prompts, and detailed
   previews
-- **🎨 Better UX** - Colored output, progress indicators, and clear error
+- **Better UX** - Colored output, progress indicators, and clear error
   messages
 
 ## Why azst?
 
-AzCopy is fast and Azure CLI is comprehensive, but both require learning
-Azure-specific syntax and working with verbose HTTPS URLs.
+AzCopy is fast and Azure CLI is comprehensive, but both are verbose in terms of
+options and have different semantics.
 
 `azst` offers a simpler alternative:
 - **Familiar commands** - `cp`, `ls`, `rm`, `du` work like their Unix
@@ -35,9 +35,6 @@ Azure-specific syntax and working with verbose HTTPS URLs.
 - **Same speed** - Uses AzCopy under the hood for parallel transfers
 - **No new auth** - Works with your existing `az login` credentials
 
-Ideal for developers who prefer Unix-style tools or are migrating from GCP's
-`gsutil`.
-
 ## Prerequisites
 
 ### For Local Development
@@ -45,7 +42,7 @@ Ideal for developers who prefer Unix-style tools or are migrating from GCP's
 - **Authentication**: Run `az login` to authenticate
 
 ### For Production / Azure VMs
-No additional prerequisites! `azst` automatically detects:
+`azst` automatically detects:
 - **Managed Identity** on Azure VMs, App Service, AKS, Container Instances
 - **Service Principal** credentials via environment variables:
   - `AZURE_TENANT_ID`
@@ -54,11 +51,13 @@ No additional prerequisites! `azst` automatically detects:
 
 ### Credential Chain
 `azst` tries authentication methods in this order:
-1. **Environment Variables** - Service Principal (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
+1. **Environment Variables** - Service Principal (`AZURE_TENANT_ID`,
+   `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`)
 2. **Managed Identity** - Automatic on Azure VMs and services
 3. **Azure CLI** - Uses `az login` credentials for local development
 
-**Note**: AzCopy will be automatically downloaded and installed during first use.
+**Note**: AzCopy will be automatically downloaded and installed during first
+use.
 
 ## Installation
 
@@ -190,33 +189,6 @@ The tool uses the Azure CLI configuration and authentication:
 
 1. Login: `az login`
 2. Set default subscription: `az account set --subscription <subscription-id>`
-
-## Architecture
-
-`azst` uses a hybrid approach for optimal performance and flexibility:
-
-### Authentication
-Uses Azure SDK's credential chain (similar to AzCopy):
-- **Local Development**: Automatically uses `az login` credentials
-- **Azure VMs/Services**: Automatically uses Managed Identity
-- **CI/CD Pipelines**: Uses Service Principal from environment variables
-
-No code changes needed when deploying to Azure! Set `AZURE_CREDENTIAL_KIND` 
-environment variable to force a specific credential type:
-- `azurecli` - Azure CLI only
-- `virtualmachine` - Managed Identity only
-- `environment` - Environment variables only
-
-### Operations
-**Read Operations** (`ls`, `cat`, `du`):
-- Uses the **Azure SDK for Rust** for direct API calls
-- No subprocess overhead, better performance
-- Streaming support for efficient memory usage
-
-**Write Operations** (`cp`, `sync`, `mv`, `rm`):
-- Uses **AzCopy** for maximum throughput
-- Parallel transfers and server-side copies
-- Battle-tested for production workloads
 
 ## Performance
 
