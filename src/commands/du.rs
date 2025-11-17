@@ -20,7 +20,7 @@ pub async fn execute(
                 azure_client = azure_client.with_storage_account(account_name);
             }
             azure_client.check_prerequisites().await?;
-            calculate_azure_usage(p, summarize, human_readable, total, &azure_client).await
+            calculate_azure_usage(p, summarize, human_readable, total, &mut azure_client).await
         }
         Some(p) => calculate_local_usage(p, summarize, human_readable, total).await,
         None => Err(anyhow!("Path is required for du command")),
@@ -32,25 +32,26 @@ async fn calculate_azure_usage(
     summarize: bool,
     human_readable: bool,
     total: bool,
-    azure_client: &AzureClient,
+    azure_client: &mut AzureClient,
 ) -> Result<()> {
     let (account, container, prefix) = parse_azure_uri(path)?;
 
     // Create azure client with account if specified in URI
-    let client = if let Some(account_name) = account.clone() {
+    let mut client = if let Some(account_name) = account.clone() {
         AzureClient::new().with_storage_account(&account_name)
     } else {
         azure_client.clone()
     };
 
-    // Get the actual account name being used
+    // Get the actual account name being used (clone it to avoid borrow conflicts)
     let actual_account = client
         .get_storage_account()
-        .ok_or_else(|| anyhow!("Storage account not configured"))?;
+        .ok_or_else(|| anyhow!("Storage account not configured"))?
+        .to_string();
 
     // Special case: If we have an account but no container, calculate usage for all containers
     if account.is_some() && container.is_empty() {
-        return calculate_all_containers_usage(summarize, human_readable, total, &client).await;
+        return calculate_all_containers_usage(summarize, human_readable, total, &mut client).await;
     }
 
     // List all blobs recursively (no delimiter)
@@ -120,7 +121,7 @@ async fn calculate_all_containers_usage(
     summarize: bool,
     human_readable: bool,
     total: bool,
-    client: &AzureClient,
+    client: &mut AzureClient,
 ) -> Result<()> {
     let containers = client.list_containers().await?;
 
@@ -131,7 +132,8 @@ async fn calculate_all_containers_usage(
 
     let actual_account = client
         .get_storage_account()
-        .ok_or_else(|| anyhow!("Storage account not configured"))?;
+        .ok_or_else(|| anyhow!("Storage account not configured"))?
+        .to_string();
 
     let writer = create_writer();
     let mut grand_total: u64 = 0;
