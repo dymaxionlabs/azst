@@ -52,6 +52,12 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
+      - name: Install dependencies (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install --no-install-recommends -y libssl-dev
+
       - name: Install cross (Linux only)
         if: matrix.os == 'ubuntu-latest'
         run: |
