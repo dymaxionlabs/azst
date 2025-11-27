@@ -4,10 +4,105 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::process::Command as AsyncCommand;
 
-use azure_core::auth::TokenCredential;
+use azure_core::auth::{AccessToken, TokenCredential};
+use azure_core::error::Error as AzureError;
 use azure_storage::StorageCredentials;
 use azure_storage_blobs::prelude::*;
 use futures::StreamExt;
+
+// ============================================================================
+// Azure ML MSI Credential - Custom credential for Azure ML Compute Instances
+// ============================================================================
+
+/// Response from Azure ML MSI endpoint
+#[derive(Debug, Deserialize)]
+struct MsiTokenResponse {
+    access_token: String,
+    expires_on: i64,
+}
+
+/// Custom token credential for Azure ML Compute Instances
+/// 
+/// Azure ML compute instances use a local MSI endpoint at http://127.0.0.1:46808/MSI/auth
+/// with a special 'secret' header, which differs from the standard Azure VM MSI endpoint.
+#[derive(Clone, Debug)]
+struct AzureMLMsiCredential {
+    endpoint: String,
+    secret: String,
+}
+
+impl AzureMLMsiCredential {
+    fn new(endpoint: String, secret: String) -> Self {
+        Self {
+            endpoint,
+            secret,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl TokenCredential for AzureMLMsiCredential {
+    async fn get_token(&self, scopes: &[&str]) -> Result<AccessToken, AzureError> {
+        // Convert scopes to resource URL
+        // Azure uses resource URIs like https://management.azure.com/
+        let resource = if !scopes.is_empty() {
+            scopes[0].trim_end_matches("/.default")
+        } else {
+            "https://management.azure.com"
+        };
+
+        let url = format!(
+            "{}?api-version=2018-02-01&resource={}",
+            self.endpoint, resource
+        );
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .header("secret", &self.secret)
+            .send()
+            .await
+            .map_err(|e| {
+                AzureError::new(
+                    azure_core::error::ErrorKind::Credential,
+                    format!("Failed to request token from Azure ML MSI endpoint: {}", e),
+                )
+            })?;
+
+        if !response.status().is_success() {
+            return Err(AzureError::new(
+                azure_core::error::ErrorKind::Credential,
+                format!(
+                    "Azure ML MSI endpoint returned error status: {}",
+                    response.status()
+                ),
+            ));
+        }
+
+        let token_response: MsiTokenResponse = response.json().await.map_err(|e| {
+            AzureError::new(
+                azure_core::error::ErrorKind::Credential,
+                format!("Failed to parse token response: {}", e),
+            )
+        })?;
+
+        // expires_on is already a Unix timestamp
+        let expires_on = time::OffsetDateTime::from_unix_timestamp(token_response.expires_on)
+            .map_err(|e| {
+                AzureError::new(
+                    azure_core::error::ErrorKind::Credential,
+                    format!("Invalid expires_on timestamp: {}", e),
+                )
+            })?;
+
+        Ok(AccessToken::new(token_response.access_token, expires_on))
+    }
+
+    async fn clear_cache(&self) -> Result<(), AzureError> {
+        Ok(())
+    }
+}
+
 
 // ============================================================================
 // AzCopy Configuration
@@ -226,6 +321,18 @@ impl AzureClient {
             return Ok(cred.clone());
         }
 
+        // Check for Azure ML MSI environment variables first
+        // Azure ML compute instances use MSI_ENDPOINT and MSI_SECRET
+        if let (Ok(endpoint), Ok(secret)) = (
+            std::env::var("MSI_ENDPOINT"),
+            std::env::var("MSI_SECRET"),
+        ) {
+            let credential = Arc::new(AzureMLMsiCredential::new(endpoint, secret));
+            self.credential = Some(credential.clone());
+            return Ok(credential as Arc<dyn TokenCredential>);
+        }
+
+        // Fall back to standard Azure credential chain
         // Use create_credential() which creates DefaultAzureCredential by default
         // or SpecificAzureCredential if AZURE_CREDENTIAL_KIND is set
         // This automatically tries (in order):
