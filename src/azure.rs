@@ -22,7 +22,7 @@ struct MsiTokenResponse {
 }
 
 /// Custom token credential for Azure ML Compute Instances
-/// 
+///
 /// Azure ML compute instances use a local MSI endpoint at http://127.0.0.1:46808/MSI/auth
 /// with a special 'secret' header, which differs from the standard Azure VM MSI endpoint.
 #[derive(Clone, Debug)]
@@ -33,10 +33,7 @@ struct AzureMLMsiCredential {
 
 impl AzureMLMsiCredential {
     fn new(endpoint: String, secret: String) -> Self {
-        Self {
-            endpoint,
-            secret,
-        }
+        Self { endpoint, secret }
     }
 }
 
@@ -102,7 +99,6 @@ impl TokenCredential for AzureMLMsiCredential {
         Ok(())
     }
 }
-
 
 // ============================================================================
 // AzCopy Configuration
@@ -323,10 +319,9 @@ impl AzureClient {
 
         // Check for Azure ML MSI environment variables first
         // Azure ML compute instances use MSI_ENDPOINT and MSI_SECRET
-        if let (Ok(endpoint), Ok(secret)) = (
-            std::env::var("MSI_ENDPOINT"),
-            std::env::var("MSI_SECRET"),
-        ) {
+        if let (Ok(endpoint), Ok(secret)) =
+            (std::env::var("MSI_ENDPOINT"), std::env::var("MSI_SECRET"))
+        {
             let credential = Arc::new(AzureMLMsiCredential::new(endpoint, secret));
             self.credential = Some(credential.clone());
             return Ok(credential as Arc<dyn TokenCredential>);
@@ -1186,7 +1181,10 @@ mod tests {
 
         // The credential should be created (though it will fail to get a token with fake endpoint)
         // The important thing is that it detects the Azure ML MSI environment
-        assert!(result.is_ok(), "Should create Azure ML MSI credential when environment variables are set");
+        assert!(
+            result.is_ok(),
+            "Should create Azure ML MSI credential when environment variables are set"
+        );
 
         // Restore original values
         if let Some(val) = original_endpoint {
