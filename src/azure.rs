@@ -4,10 +4,101 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::process::Command as AsyncCommand;
 
-use azure_core::auth::TokenCredential;
+use azure_core::auth::{AccessToken, TokenCredential};
+use azure_core::error::Error as AzureError;
 use azure_storage::StorageCredentials;
 use azure_storage_blobs::prelude::*;
 use futures::StreamExt;
+
+// ============================================================================
+// Azure ML MSI Credential - Custom credential for Azure ML Compute Instances
+// ============================================================================
+
+/// Response from Azure ML MSI endpoint
+#[derive(Debug, Deserialize)]
+struct MsiTokenResponse {
+    access_token: String,
+    expires_on: i64,
+}
+
+/// Custom token credential for Azure ML Compute Instances
+///
+/// Azure ML compute instances use a local MSI endpoint at http://127.0.0.1:46808/MSI/auth
+/// with a special 'secret' header, which differs from the standard Azure VM MSI endpoint.
+#[derive(Clone, Debug)]
+struct AzureMLMsiCredential {
+    endpoint: String,
+    secret: String,
+}
+
+impl AzureMLMsiCredential {
+    fn new(endpoint: String, secret: String) -> Self {
+        Self { endpoint, secret }
+    }
+}
+
+#[async_trait::async_trait]
+impl TokenCredential for AzureMLMsiCredential {
+    async fn get_token(&self, scopes: &[&str]) -> Result<AccessToken, AzureError> {
+        // Convert scopes to resource URL
+        // Azure uses resource URIs like https://management.azure.com/
+        let resource = if !scopes.is_empty() {
+            scopes[0].trim_end_matches("/.default")
+        } else {
+            "https://management.azure.com"
+        };
+
+        let url = format!(
+            "{}?api-version=2018-02-01&resource={}",
+            self.endpoint, resource
+        );
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .header("secret", &self.secret)
+            .send()
+            .await
+            .map_err(|e| {
+                AzureError::new(
+                    azure_core::error::ErrorKind::Credential,
+                    format!("Failed to request token from Azure ML MSI endpoint: {}", e),
+                )
+            })?;
+
+        if !response.status().is_success() {
+            return Err(AzureError::new(
+                azure_core::error::ErrorKind::Credential,
+                format!(
+                    "Azure ML MSI endpoint returned error status: {}",
+                    response.status()
+                ),
+            ));
+        }
+
+        let token_response: MsiTokenResponse = response.json().await.map_err(|e| {
+            AzureError::new(
+                azure_core::error::ErrorKind::Credential,
+                format!("Failed to parse token response: {}", e),
+            )
+        })?;
+
+        // expires_on is already a Unix timestamp
+        let expires_on = time::OffsetDateTime::from_unix_timestamp(token_response.expires_on)
+            .map_err(|e| {
+                AzureError::new(
+                    azure_core::error::ErrorKind::Credential,
+                    format!("Invalid expires_on timestamp: {}", e),
+                )
+            })?;
+
+        Ok(AccessToken::new(token_response.access_token, expires_on))
+    }
+
+    async fn clear_cache(&self) -> Result<(), AzureError> {
+        Ok(())
+    }
+}
 
 // ============================================================================
 // AzCopy Configuration
@@ -226,6 +317,17 @@ impl AzureClient {
             return Ok(cred.clone());
         }
 
+        // Check for Azure ML MSI environment variables first
+        // Azure ML compute instances use MSI_ENDPOINT and MSI_SECRET
+        if let (Ok(endpoint), Ok(secret)) =
+            (std::env::var("MSI_ENDPOINT"), std::env::var("MSI_SECRET"))
+        {
+            let credential = Arc::new(AzureMLMsiCredential::new(endpoint, secret));
+            self.credential = Some(credential.clone());
+            return Ok(credential as Arc<dyn TokenCredential>);
+        }
+
+        // Fall back to standard Azure credential chain
         // Use create_credential() which creates DefaultAzureCredential by default
         // or SpecificAzureCredential if AZURE_CREDENTIAL_KIND is set
         // This automatically tries (in order):
@@ -1062,6 +1164,68 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_azure_ml_msi_credential_detection() {
+        // Test that Azure ML MSI credentials are detected when environment variables are set
+        use std::env;
+
+        // Save original values
+        let original_endpoint = env::var("MSI_ENDPOINT").ok();
+        let original_secret = env::var("MSI_SECRET").ok();
+
+        // Set Azure ML MSI environment variables
+        env::set_var("MSI_ENDPOINT", "http://127.0.0.1:46808/MSI/auth");
+        env::set_var("MSI_SECRET", "test-secret");
+
+        let mut client = AzureClient::new();
+        let result = client.get_credential().await;
+
+        // The credential should be created (though it will fail to get a token with fake endpoint)
+        // The important thing is that it detects the Azure ML MSI environment
+        assert!(
+            result.is_ok(),
+            "Should create Azure ML MSI credential when environment variables are set"
+        );
+
+        // Restore original values
+        if let Some(val) = original_endpoint {
+            env::set_var("MSI_ENDPOINT", val);
+        } else {
+            env::remove_var("MSI_ENDPOINT");
+        }
+        if let Some(val) = original_secret {
+            env::set_var("MSI_SECRET", val);
+        } else {
+            env::remove_var("MSI_SECRET");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_azure_ml_msi_credential_fallback() {
+        // Test that when Azure ML MSI vars are not set, it falls back to standard chain
+        use std::env;
+
+        // Save and clear Azure ML MSI environment variables
+        let original_endpoint = env::var("MSI_ENDPOINT").ok();
+        let original_secret = env::var("MSI_SECRET").ok();
+        env::remove_var("MSI_ENDPOINT");
+        env::remove_var("MSI_SECRET");
+
+        let mut client = AzureClient::new();
+        let _result = client.get_credential().await;
+
+        // Should attempt to use standard credential chain (may succeed or fail depending on environment)
+        // This test just verifies it doesn't panic when Azure ML vars are missing
+
+        // Restore original values
+        if let Some(val) = original_endpoint {
+            env::set_var("MSI_ENDPOINT", val);
+        }
+        if let Some(val) = original_secret {
+            env::set_var("MSI_SECRET", val);
+        }
+    }
+
+    #[tokio::test]
     async fn test_credential_chain_with_environment_override() {
         // Test that AZURE_CREDENTIAL_KIND can force a specific credential type
         // Note: This test will fail if the specified credential type is not available
@@ -1098,12 +1262,19 @@ mod tests {
     fn test_credential_chain_documentation() {
         // This is a documentation test that verifies the expected credential chain order
         // The actual chain is:
+        // 0. Azure ML MSI (MSI_ENDPOINT, MSI_SECRET) - Custom for Azure ML Compute Instances
         // 1. EnvironmentCredential (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
         // 2. WorkloadIdentityCredential (AZURE_FEDERATED_TOKEN_FILE)
         // 3. ManagedIdentityCredential (Azure VMs, App Service, etc.)
         // 4. AzureCliCredential (az login)
 
         use std::env;
+
+        // Document Azure ML MSI environment variables (highest priority)
+        let azureml_msi_vars = vec!["MSI_ENDPOINT", "MSI_SECRET"];
+        for var in azureml_msi_vars {
+            let _ = env::var(var); // Just checking we can access env vars
+        }
 
         // Document required environment variables for Service Principal
         let required_sp_vars = vec!["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"];
@@ -1147,6 +1318,8 @@ mod tests {
                 "AZURE_FEDERATED_TOKEN_FILE",
                 env::var("AZURE_FEDERATED_TOKEN_FILE").ok(),
             ),
+            ("MSI_ENDPOINT", env::var("MSI_ENDPOINT").ok()),
+            ("MSI_SECRET", env::var("MSI_SECRET").ok()),
         ];
 
         // Clear all credential environment variables to force failure
@@ -1155,6 +1328,8 @@ mod tests {
         env::remove_var("AZURE_CLIENT_SECRET");
         env::remove_var("AZURE_FEDERATED_TOKEN_FILE");
         env::remove_var("AZURE_CREDENTIAL_KIND");
+        env::remove_var("MSI_ENDPOINT");
+        env::remove_var("MSI_SECRET");
 
         let mut client = AzureClient::new();
         let result = client.get_credential().await;
@@ -1220,6 +1395,11 @@ mod tests {
         // Document and verify the credential chain priority
         // This test serves as documentation for the expected behavior
 
+        // Priority 0: Azure ML MSI (Custom)
+        // Required: MSI_ENDPOINT and MSI_SECRET environment variables
+        // Use case: Azure ML Compute Instances, Azure ML managed endpoints
+        // Note: This is checked FIRST before the standard Azure credential chain
+
         // Priority 1: Environment Variables (Service Principal)
         // Required: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
         // Use case: CI/CD pipelines, automation scripts
@@ -1237,7 +1417,7 @@ mod tests {
         // Use case: Local development
 
         // This matches the behavior of:
-        // - Azure SDK DefaultAzureCredential
+        // - Azure SDK DefaultAzureCredential (with Azure ML MSI prepended)
         // - AzCopy authentication
         // - Azure PowerShell
 
